@@ -1,0 +1,150 @@
+import React from 'react';
+
+interface AnsiColorMap {
+  [key: string]: string;
+}
+
+interface TerminalLinkProps {
+  href: string;
+  children: React.ReactNode;
+}
+
+const TerminalLink = React.forwardRef<HTMLAnchorElement, TerminalLinkProps>(
+  ({ href, children }, ref) => 
+    React.createElement('a', {
+      ref,
+      href,
+      target: '_blank',
+      rel: 'noopener noreferrer',
+      className: 'terminal-link',
+      onClick: (e: React.MouseEvent<HTMLAnchorElement>) => {
+        e.preventDefault();
+        window.open(href, '_blank');
+      },
+      children
+    })
+);
+
+TerminalLink.displayName = 'TerminalLink';
+
+const processLinks = (text: string): React.ReactNode[] => {
+  const urlAndPathRegex = new RegExp(
+    '(https?://[^\\s]+)|' + // URLs
+    '(/(?:[\\w.-]+/)*[\\w.-]+)|' + // Chemins Unix
+    '([A-Za-z]:\\\\(?:[^\\\\/:*?"<>|\\r\\n]+\\\\)*[^\\\\/:*?"<>|\\r\\n]*)', // Chemins Windows
+    'g'
+  );
+  
+  const parts = text.split(urlAndPathRegex);
+  const nodes: React.ReactNode[] = [];
+  
+  parts.forEach((part, i) => {
+    if (!part) return;
+    
+    if (part.match(urlAndPathRegex)) {
+      const isUrl = part.startsWith('http');
+      const href = isUrl ? part : `file://${part}`;
+      nodes.push(
+        React.createElement(TerminalLink, {
+          key: `link-${i}`,
+          href,
+          children: part
+        })
+      );
+    } else {
+      nodes.push(part);
+    }
+  });
+
+  return nodes;
+};
+
+export const formatCommand = (command: string): React.ReactElement => {
+  const words = command.split(' ');
+  const firstWord = words[0];
+  const rest = command.slice(firstWord.length);
+  
+  const paramRegex = /(\s-[a-zA-Z]+|\s--[a-zA-Z-]+)|("[^"]*")|('[^']*')/g;
+  
+  const formattedRest = rest.replace(paramRegex, (match: string) => {
+    if (match.startsWith(' -')) {
+      return `<span class="text-gray-400">${match}</span>`;
+    }
+    return `<span class="text-[#3b8eea]">${match}</span>`;
+  });
+
+  return React.createElement(React.Fragment, null, [
+    React.createElement('span', {
+      key: 'first-word',
+      className: 'text-yellow-300',
+      children: firstWord
+    }),
+    React.createElement('span', {
+      key: 'rest',
+      className: 'terminal-command',
+      dangerouslySetInnerHTML: { __html: formattedRest }
+    })
+  ]);
+};
+
+const parseAnsiColor = (text: string): React.ReactNode[] => {
+  const ansiRegex = /\[(\d+(?:;\d+)*)?m/g;
+  
+  const colorMap: AnsiColorMap = {
+    '31': 'text-red-500',
+    '32': 'text-green-500',
+    '33': 'text-yellow-500',
+    '34': 'text-blue-500',
+    '35': 'text-purple-500',
+    '36': 'text-cyan-500',
+    '37': 'text-gray-100',
+    '90': 'text-gray-500',
+    '0': '',
+    '39': 'text-gray-300'
+  };
+
+  const parts = text.split(ansiRegex);
+  const nodes: React.ReactNode[] = [];
+  let currentColor = '';
+  
+  parts.forEach((part, index) => {
+    if (index % 2 === 0) {
+      if (part) {
+        const formattedText = processLinks(part);
+        nodes.push(
+          React.createElement('span', {
+            key: `ansi-${index}`,
+            className: currentColor || undefined,
+            children: formattedText
+          })
+        );
+      }
+    } else {
+      const codes = part.split(';');
+      currentColor = codes
+        .map(code => colorMap[code] || '')
+        .filter(Boolean)
+        .join(' ');
+    }
+  });
+
+  return nodes;
+};
+
+export const formatOutput = (text: string): React.ReactElement => {
+  // Nettoie l'encodage avant de formater
+  const cleanedText = text;
+  // const cleanedText = cleanTerminalOutput(text);
+  
+  if (cleanedText.includes('[')) {
+    return React.createElement('pre', {
+      className: 'whitespace-pre-wrap',
+      children: parseAnsiColor(cleanedText)
+    });
+  }
+  
+  return React.createElement('pre', {
+    className: 'whitespace-pre-wrap text-[#d4d4d4]',
+    children: processLinks(cleanedText)
+  });
+};

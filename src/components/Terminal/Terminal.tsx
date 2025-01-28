@@ -1,11 +1,13 @@
+// src/components/Terminal/Terminal.tsx
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import '@/components/Terminal/styles/terminal.css';
 import { TerminalUI } from './TerminalUI';
-import { TerminalConfig, defaultConfig } from '@/config/terminalConfig';
-import { setTerminalExecutor } from '@/utils/terminalUtils';
-import { translateCommand } from '@/utils/commandUtils';
+import { TerminalConfig, defaultConfig } from '@/components/Terminal/config/terminalConfig';
+import { setTerminalExecutor } from '@/components/Terminal/utils/terminalUtils';
+import { translateCommand } from '@/components/Terminal/utils/commandOS';
 import { isCustomCommand, executeCustomCommand } from './services/customCommands';
 import { executeCommandOnServer, CommandResult } from './services/terminalApi';
+import { formatCommand, formatTextWithLinks } from './services/terminalFormatter';
 
 interface TerminalProps {
   config?: Partial<TerminalConfig>;
@@ -59,15 +61,15 @@ const Terminal: React.FC<TerminalProps> = ({ config = {} }) => {
         const trimmedCommand = command.trim().toLowerCase();
         let result: CommandResult;
 
-        // Handle clear commands specially
+        // Gérer les commandes de clair
         if (trimmedCommand === 'clear' || trimmedCommand === 'cls') {
-          setHistory([]); // Clear history immediately
+          setHistory([]); // Effacer l'historique immédiatement
           setCommand('');
           setContentKey(prev => prev + 1);
-          return; // Exit early for clear commands
+          return; // Sortir tôt pour les commandes de clair
         } 
 
-        // Process other commands
+        // Traiter les autres commandes
         if (isCustomCommand(command)) {
           result = await executeCustomCommand(command);
         } else {
@@ -86,10 +88,10 @@ const Terminal: React.FC<TerminalProps> = ({ config = {} }) => {
             };
             return newHistory;
           });
-          setTimeout(scrollToBottom, 0); // Ensure DOM is updated
+          setTimeout(scrollToBottom, 0); // S'assurer que le DOM est mis à jour
         }
 
-        // Handle directory changes for server commands
+        // Gérer les changements de répertoire pour les commandes serveur
         if (command.toLowerCase().startsWith('cd ') && result.currentDirectory) {
           setCurrentDirectory(result.currentDirectory);
         }
@@ -108,7 +110,7 @@ const Terminal: React.FC<TerminalProps> = ({ config = {} }) => {
         }
       }
     }
-  }, []);
+  }, [scrollToBottom]);
 
   useEffect(() => {
     setTerminalExecutor(executeCommand);
@@ -157,12 +159,19 @@ const Terminal: React.FC<TerminalProps> = ({ config = {} }) => {
     setContentKey(prev => prev + 1);
   }, []);
 
-  const formatCommand = useCallback((command: string): React.ReactNode => {
-    return <span className="text-[#d4d4d4]">{command}</span>;
+  const formatCommandWithHighlight = useCallback((command: string): React.ReactNode => {
+    return formatCommand(command);
   }, []);
 
-  const formatOutput = useCallback((output: string): React.ReactNode => {
-    return <pre className="whitespace-pre-wrap text-[#d4d4d4]">{output}</pre>;
+  const formatOutput = useCallback((output: string): JSX.Element => {
+    console.log('Formatting output:', output);
+    const formattedText = formatTextWithLinks(output);
+    console.log('Formatted text with links:', formattedText);
+    return (
+      <pre className="whitespace-pre-wrap text-[#d4d4d4]">
+        {formattedText}
+      </pre>
+    );
   }, []);
 
   const onFolderSelect = useCallback(async () => {
@@ -200,7 +209,7 @@ const Terminal: React.FC<TerminalProps> = ({ config = {} }) => {
       setCommand={setCommand}
       executeCommand={executeCommand}
       mergedConfig={mergedConfig}
-      formatCommand={formatCommand}
+      formatCommand={formatCommandWithHighlight}
       formatOutput={formatOutput}
       onFolderSelect={onFolderSelect}
       observerRef={observerRef}
