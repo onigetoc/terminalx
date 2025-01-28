@@ -132,7 +132,7 @@ const Index = () => {
           readOnlyMode: false,
           initialState: 'open',
           defaultHeight: 320,
-        }}
+        }} 
       />
     </div>
   );

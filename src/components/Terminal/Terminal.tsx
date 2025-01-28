@@ -28,15 +28,8 @@ const Terminal: React.FC<TerminalProps> = ({ config = {} }) => {
   const contentRef = useRef<HTMLElement | null>(null);
 
   const scrollToBottom = useCallback(() => {
-    if (contentRef.current) {
+    if (terminalRef.current) {
       terminalRef.current.scrollTop = terminalRef.current.scrollHeight;
-      // Use RAF to ensure we have the latest scroll height
-      // requestAnimationFrame(() => {
-      //   contentRef.current?.scrollTo({
-      //     top: contentRef.current.scrollHeight,
-      //     behavior: 'auto' // Use 'auto' for immediate scroll
-      //   });
-      // });
     }
   }, []);
 

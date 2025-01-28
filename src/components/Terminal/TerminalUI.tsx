@@ -236,6 +236,7 @@ export function TerminalUI(props: TerminalUIProps): JSX.Element {
               isVisible={isSearchVisible}
               onClose={() => setIsSearchVisible(false)}
               terminalRef={props.terminalRef}
+              history={props.history}
             />
             <div 
               ref={el => {

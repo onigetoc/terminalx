@@ -6,6 +6,7 @@ interface TerminalSearchProps {
   isVisible: boolean;
   onClose: () => void;
   terminalRef: React.RefObject<HTMLDivElement>;
+  history: Array<{ command: string; output: string; isLoading?: boolean }>;
 }
 
 interface SearchMatch {
@@ -14,60 +15,12 @@ interface SearchMatch {
   length: number;
 }
 
-const TerminalSearch = ({ isVisible, onClose, terminalRef }: TerminalSearchProps): JSX.Element => {
+const TerminalSearch = ({ isVisible, onClose, terminalRef, history }: TerminalSearchProps): JSX.Element => {
   const [searchText, setSearchText] = useState('');
   const [currentMatch, setCurrentMatch] = useState(0);
   const [totalMatches, setTotalMatches] = useState(0);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const matchesRef = useRef<SearchMatch[]>([]);
-
-  useEffect(() => {
-    if (searchInputRef.current) {
-      searchInputRef.current.focus();
-      searchInputRef.current.select();
-    }
-  }, [isVisible]);
-
-  useEffect(() => {
-    const handleKeydown = (e: KeyboardEvent) => {
-      // Handle Ctrl+F globally
-      if (e.ctrlKey && e.key === 'f') {
-        e.preventDefault();
-        if (searchInputRef.current) {
-          searchInputRef.current.focus();
-          searchInputRef.current.select();
-        }
-        return;
-      }
-
-      // Only handle other keys if search input is focused
-      if (!searchInputRef.current?.contains(document.activeElement)) {
-        return;
-      }
-
-      if (isVisible && e.key === 'Escape') {
-        e.preventDefault();
-        onClose();
-        return;
-      }
-
-      if (isVisible && totalMatches > 0) {
-        if (e.key === 'Enter') {
-          e.preventDefault();
-          handleNext();
-        } else if (e.key === 'ArrowUp') {
-          e.preventDefault();
-          handlePrevious();
-        } else if (e.key === 'ArrowDown') {
-          e.preventDefault();
-          handleNext();
-        }
-      }
-    };
-
-    document.addEventListener('keydown', handleKeydown);
-    return () => document.removeEventListener('keydown', handleKeydown);
-  }, [isVisible, totalMatches, currentMatch]);
 
   const clearHighlights = () => {
     const content = terminalRef.current;
@@ -94,7 +47,6 @@ const TerminalSearch = ({ isVisible, onClose, terminalRef }: TerminalSearchProps
       NodeFilter.SHOW_TEXT,
       {
         acceptNode: (node) => {
-          // Check if any ancestor has the terminal-command class
           let current = node.parentElement;
           while (current) {
             if (current.classList?.contains('terminal-command')) {
@@ -121,6 +73,16 @@ const TerminalSearch = ({ isVisible, onClose, terminalRef }: TerminalSearchProps
     return matches;
   };
 
+  const scrollToCurrentMatch = (index: number = currentMatch) => {
+    const highlights = Array.from(terminalRef.current?.getElementsByClassName('search-highlight') || []);
+    if (highlights.length === 0) return;
+    
+    const current = highlights[index];
+    if (current instanceof HTMLElement) {
+      current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  };
+
   const highlightMatches = () => {
     clearHighlights();
     
@@ -128,13 +90,10 @@ const TerminalSearch = ({ isVisible, onClose, terminalRef }: TerminalSearchProps
     matchesRef.current = matches;
 
     if (matches.length > 0) {
-      // On inverse l'ordre des correspondances pour traiter les dernières d'abord
-      // Cela évite les problèmes d'index invalides causés par les modifications précédentes
       [...matches].reverse().forEach((match, reversedIdx) => {
         const idx = matches.length - 1 - reversedIdx;
         const text = match.node.textContent || '';
         
-        // Vérifier si l'index est toujours valide
         if (match.index < text.length && match.index + match.length <= text.length) {
           try {
             const range = document.createRange();
@@ -159,21 +118,79 @@ const TerminalSearch = ({ isVisible, onClose, terminalRef }: TerminalSearchProps
     scrollToCurrentMatch();
   };
 
-  const scrollToCurrentMatch = (index: number = currentMatch) => {
-    const highlights = Array.from(terminalRef.current?.getElementsByClassName('search-highlight') || []);
-    if (highlights.length === 0) return;
-    
-    const current = highlights[index];
-    if (current instanceof HTMLElement) {
-      current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  // Focus l'input de recherche quand il devient visible
+  useEffect(() => {
+    if (searchInputRef.current) {
+      searchInputRef.current.focus();
+      searchInputRef.current.select();
     }
-  };
+  }, [isVisible]);
 
+  // Gestion des raccourcis clavier
+  useEffect(() => {
+    const handleKeydown = (e: KeyboardEvent) => {
+      if (e.ctrlKey && e.key === 'f') {
+        e.preventDefault();
+        if (searchInputRef.current) {
+          searchInputRef.current.focus();
+          searchInputRef.current.select();
+        }
+        return;
+      }
+
+      if (!searchInputRef.current?.contains(document.activeElement)) {
+        return;
+      }
+
+      if (isVisible && e.key === 'Escape') {
+        e.preventDefault();
+        onClose();
+        return;
+      }
+
+      if (isVisible && totalMatches > 0) {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          handleNext();
+        } else if (e.key === 'ArrowUp') {
+          e.preventDefault();
+          handlePrevious();
+        } else if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          handleNext();
+        }
+      }
+    };
+
+    document.addEventListener('keydown', handleKeydown);
+    return () => document.removeEventListener('keydown', handleKeydown);
+  }, [isVisible, totalMatches, currentMatch, onClose]);
+
+  // Mise à jour des résultats de recherche
+  useEffect(() => {
+    if (!searchText) {
+      clearHighlights();
+      setTotalMatches(0);
+      setCurrentMatch(0);
+      matchesRef.current = [];
+    } else {
+      highlightMatches();
+    }
+  }, [searchText, history]); // La dépendance à history est importante pour détecter les changements de contenu
+
+  // Défilement vers l'occurrence actuelle
   useEffect(() => {
     if (totalMatches > 0) {
       scrollToCurrentMatch();
     }
   }, [currentMatch, totalMatches]);
+
+  // Nettoyage au démontage
+  useEffect(() => {
+    return () => {
+      clearHighlights();
+    };
+  }, []);
 
   const handleNext = () => {
     if (totalMatches === 0) return;
@@ -199,17 +216,6 @@ const TerminalSearch = ({ isVisible, onClose, terminalRef }: TerminalSearchProps
     });
   };
 
-  useEffect(() => {
-    if (!searchText) {
-      clearHighlights();
-      setTotalMatches(0);
-      setCurrentMatch(0);
-      matchesRef.current = [];
-    } else {
-      highlightMatches();
-    }
-  }, [searchText]);
-
   if (!isVisible) return <></>;
 
   return (
@@ -220,7 +226,6 @@ const TerminalSearch = ({ isVisible, onClose, terminalRef }: TerminalSearchProps
         type="text"
         value={searchText}
         onChange={(e) => setSearchText(e.target.value)}
-        // className="rounded-xl transition-opacity duration-200 opacity-100"
         className="w-40 bg-transparent border-none rounded-xl text-[#d4d4d4] text-sm px-2 outline-none focus:outline-none placeholder-[#666] transition-opacity duration-200 opacity-100"
         placeholder="Find in terminal..."
         onMouseDown={(e) => e.stopPropagation()}
@@ -228,35 +233,35 @@ const TerminalSearch = ({ isVisible, onClose, terminalRef }: TerminalSearchProps
       <span className="text-[#8a8a8a] text-sm px-2">
         {totalMatches > 0 ? `${currentMatch + 1}/${totalMatches}` : '0/0'}
       </span>
-       <div className="flex gap-1">
-         <Button
-           variant="ghost"
-           size="icon"
-           className="hover:bg-[#2a2d2e] rounded disabled:opacity-50"
-           onClick={handlePrevious}
-           disabled={totalMatches === 0}
-         >
-           <ArrowUp className="w-4 h-4 lucide" />
-         </Button>
-         <Button
-           variant="ghost"
-           size="icon"
-           className=" hover:bg-[#2a2d2e] rounded disabled:opacity-50"
-           onClick={handleNext}
-           disabled={totalMatches === 0}
-         >
-           <ArrowDown className="w-4 h-4 lucide" />
-         </Button>
-         <Button
-           variant="ghost"
-           size="icon"
-           className=" hover:bg-[#2a2d2e] rounded disabled:opacity-50"
-           onClick={onClose}
-         >
-           <X className="w-4 h-4 lucide" />
-         </Button>
-       </div>
-     </div>
+      <div className="flex gap-1">
+        <Button
+          variant="ghost"
+          size="icon"
+          className="hover:bg-[#2a2d2e] rounded disabled:opacity-50"
+          onClick={handlePrevious}
+          disabled={totalMatches === 0}
+        >
+          <ArrowUp className="w-4 h-4 lucide" />
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="hover:bg-[#2a2d2e] rounded disabled:opacity-50"
+          onClick={handleNext}
+          disabled={totalMatches === 0}
+        >
+          <ArrowDown className="w-4 h-4 lucide" />
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="hover:bg-[#2a2d2e] rounded disabled:opacity-50"
+          onClick={onClose}
+        >
+          <X className="w-4 h-4 lucide" />
+        </Button>
+      </div>
+    </div>
   );
 };
 
