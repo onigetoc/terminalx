@@ -2,8 +2,9 @@ import React from 'react';
 import type { ReactNode } from 'react';
 import type { MouseEvent as ReactMouseEvent } from 'react';
 
-// Regular expressions for matching URLs
-const URL_REGEX = /(https?:\/\/[^\s]+)/g;
+// Improved regex patterns
+const URL_REGEX = /https?:\/\/[^\s"')]+/g;
+const PATH_REGEX = /[A-Za-z]:\\(?:[^\\/:*?"<>|\r\n]+\\)+[^\\/:*?"<>|\r\n'")]+/g;
 
 interface FormatOptions {
   convertPaths?: boolean;
@@ -70,46 +71,112 @@ function createLink(content: string, href: string, key: number): JSX.Element {
 /**
  * Format text to detect and convert URLs to clickable links
  */
-export function formatTextWithLinks(text: string): JSX.Element {
-  console.log('Formatting text with links:', text);
-  const segments: ReactNode[] = [];
+export function formatTextWithLinks(text: string, executeCommand: (cmd: string, display?: number) => void): JSX.Element {
+  const parts: Array<{ type: 'text' | 'url' | 'path'; content: string }> = [];
   let lastIndex = 0;
+  let match;
 
-  const urlMatches = Array.from(text.matchAll(URL_REGEX));
-  urlMatches.forEach((match, i) => {
-    const [url] = match;
-    const index = match.index!;
-
-    // Add text before the URL
-    if (index > lastIndex) {
-      segments.push(text.slice(lastIndex, index));
+  // First find all URLs
+  while ((match = URL_REGEX.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      parts.push({
+        type: 'text',
+        content: text.slice(lastIndex, match.index)
+      });
     }
-
-    // Add the URL as a link
-    segments.push(createLink(url, url, i));
-    lastIndex = index + url.length;
-  });
-
-  // Add remaining text after URLs
-  if (lastIndex < text.length) {
-    segments.push(text.slice(lastIndex));
+    parts.push({
+      type: 'url',
+      content: match[0]
+    });
+    lastIndex = match.index + match[0].length;
   }
 
-  console.log('Segments after formatting:', segments);
-  return <>{segments}</>;
+  // Add remaining text
+  if (lastIndex < text.length) {
+    parts.push({
+      type: 'text',
+      content: text.slice(lastIndex)
+    });
+  }
+
+  // Process each text part for file paths
+  const finalParts = parts.flatMap(part => {
+    if (part.type !== 'text') return [part];
+
+    const pathParts: typeof parts = [];
+    let textLastIndex = 0;
+    let pathMatch;
+
+    while ((pathMatch = PATH_REGEX.exec(part.content)) !== null) {
+      if (pathMatch.index > textLastIndex) {
+        pathParts.push({
+          type: 'text',
+          content: part.content.slice(textLastIndex, pathMatch.index)
+        });
+      }
+      pathParts.push({
+        type: 'path',
+        content: pathMatch[0]
+      });
+      textLastIndex = pathMatch.index + pathMatch[0].length;
+    }
+
+    if (textLastIndex < part.content.length) {
+      pathParts.push({
+        type: 'text',
+        content: part.content.slice(textLastIndex)
+      });
+    }
+
+    return pathParts;
+  });
+
+  return (
+    <pre className="whitespace-pre-wrap break-words font-mono">
+      {finalParts.map((part, index) => {
+        if (part.type === 'url') {
+          return (
+            <a
+              key={`url-${index}`}
+              href={part.content}
+              className="terminal-link"
+              onClick={(e) => {
+                e.preventDefault();
+                window.open(part.content, '_blank', 'noopener,noreferrer');
+              }}
+            >
+              {part.content}
+            </a>
+          );
+        }
+        if (part.type === 'path') {
+          return (
+            <a
+              key={`path-${index}`}
+              className="terminal-link text-[#3b8eea] hover:underline cursor-pointer"
+              onClick={() => {
+                executeCommand(`explorer "${part.content}"`, 0);
+              }}
+            >
+              {part.content}
+            </a>
+          );
+        }
+        return <span key={`text-${index}`}>{part.content}</span>;
+      })}
+    </pre>
+  );
 }
 
+// Update the FormattedOutput component
 export interface FormattedOutputProps {
   text: string;
+  executeCommand: (cmd: string, display?: number) => void;
 }
 
 /**
  * Component that combines link formatting
  */
-export function FormattedOutput({ text }: FormattedOutputProps): JSX.Element {
-  console.log('FormattedOutput received text:', text);
-  const formattedText = formatTextWithLinks(text);
-  console.log('Formatted text with links:', formattedText);
-
-  return <>{formattedText}</>;
+export function FormattedOutput({ text, executeCommand }: FormattedOutputProps): JSX.Element {
+  return formatTextWithLinks(text, executeCommand);
 }

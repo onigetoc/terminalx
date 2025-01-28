@@ -7,7 +7,7 @@ import { setTerminalExecutor } from '@/components/Terminal/utils/terminalUtils';
 import { translateCommand } from '@/components/Terminal/utils/commandOS';
 import { isCustomCommand, executeCustomCommand } from './services/customCommands';
 import { executeCommandOnServer, CommandResult } from './services/terminalApi';
-import { formatCommand, formatTextWithLinks } from './services/terminalFormatter';
+import { formatCommand, formatTextWithLinks, FormattedOutput } from './services/terminalFormatter';
 
 interface TerminalProps {
   config?: Partial<TerminalConfig>;
@@ -164,15 +164,8 @@ const Terminal: React.FC<TerminalProps> = ({ config = {} }) => {
   }, []);
 
   const formatOutput = useCallback((output: string): JSX.Element => {
-    console.log('Formatting output:', output);
-    const formattedText = formatTextWithLinks(output);
-    console.log('Formatted text with links:', formattedText);
-    return (
-      <pre className="whitespace-pre-wrap text-[#d4d4d4]">
-        {formattedText}
-      </pre>
-    );
-  }, []);
+    return <FormattedOutput text={output} executeCommand={executeCommand} />;
+  }, [executeCommand]);
 
   const onFolderSelect = useCallback(async () => {
     try {
