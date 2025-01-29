@@ -1,37 +1,59 @@
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import path from 'path';
+import os from 'os';
 
 const execAsync = promisify(exec);
 
-let currentDirectory = process.cwd();
+let currentWorkingDirectory = process.cwd();
 
 export const executeCommand = async (command: string) => {
   try {
-    // Handle cd command specially
-    if (command.startsWith('cd ')) {
-      const newPath = command.slice(3).trim();
-      const resolvedPath = path.resolve(currentDirectory, newPath);
-      process.chdir(resolvedPath);
-      currentDirectory = process.cwd();
-      return {
-        output: '',
-        currentDirectory
-      };
+    const cmd = command.trim();
+    
+    // Gestion spéciale de cd
+    if (cmd.startsWith('cd')) {
+      const pathArg = cmd.slice(2).trim();
+      let targetPath;
+
+      if (!pathArg || pathArg === '~') {
+        targetPath = os.homedir();
+      } else if (pathArg === '..' || pathArg === '../') {
+        targetPath = path.join(currentWorkingDirectory, '..');
+      } else {
+        targetPath = path.resolve(currentWorkingDirectory, pathArg);
+      }
+
+      try {
+        process.chdir(targetPath);
+        currentWorkingDirectory = process.cwd();
+        return {
+          output: `Directory changed to ${currentWorkingDirectory}`,
+          currentDirectory: currentWorkingDirectory
+        };
+      } catch (error) {
+        return {
+          output: `cd: no such file or directory: ${pathArg}`,
+          currentDirectory: currentWorkingDirectory
+        };
+      }
     }
 
-    // Execute command in current directory
-    const { stdout, stderr } = await execAsync(command, { cwd: currentDirectory });
+    // Exécution des autres commandes dans le répertoire courant
+    const { stdout, stderr } = await execAsync(command, { 
+      cwd: currentWorkingDirectory 
+    });
+
     return {
       output: stdout || stderr,
-      currentDirectory
+      currentDirectory: currentWorkingDirectory
     };
   } catch (error: any) {
     return {
       output: error.message,
-      currentDirectory
+      currentDirectory: currentWorkingDirectory
     };
   }
 };
 
-export const getCurrentDirectory = () => currentDirectory;
+export const getCurrentDirectory = () => currentWorkingDirectory;
