@@ -50,7 +50,7 @@ const Index = () => {
           <Button
             variant="outline"
             onClick={() => {
-              executeCommand(['cd test', 'type todo.txt', 'echo hello'])
+              executeCommand(['cd test', 'type todo.txt', 'echo hello', 'cd..'])
                 .then(() => console.log("Commande terminée"))
                 .catch((err) => console.error("Erreur:", err));
             }}

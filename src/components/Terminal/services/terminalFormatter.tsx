@@ -1,6 +1,7 @@
 import React from 'react';
 import type { ReactNode } from 'react';
 import type { MouseEvent as ReactMouseEvent } from 'react';
+import Ansi from 'ansi-to-react';
 
 // Improved regex patterns
 const URL_REGEX = /https?:\/\/[^\s"')]+/g;
@@ -178,5 +179,16 @@ export interface FormattedOutputProps {
  * Component that combines link formatting
  */
 export function FormattedOutput({ text, executeCommand }: FormattedOutputProps): JSX.Element {
-  return formatTextWithLinks(text, executeCommand);
+  // Check if the text contains ANSI escape codes
+  const hasAnsiCodes = /\u001b\[\d+m/.test(text);
+
+  return (
+    <div className="terminal-output">
+      {hasAnsiCodes ? (
+        <Ansi>{text}</Ansi>
+      ) : (
+        formatTextWithLinks(text, executeCommand)
+      )}
+    </div>
+  );
 }

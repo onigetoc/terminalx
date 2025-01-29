@@ -164,7 +164,15 @@ const Terminal: React.FC<TerminalProps> = ({ config = {} }) => {
   }, []);
 
   const formatOutput = useCallback((output: string): JSX.Element => {
-    return <FormattedOutput text={output} executeCommand={executeCommand} />;
+    // Si la sortie est vide, ne rien afficher
+    if (!output.trim()) {
+      return <></>;
+    }
+    return (
+      <div className="terminal-output-line">
+        <FormattedOutput text={output} executeCommand={executeCommand} />
+      </div>
+    );
   }, [executeCommand]);
 
   const onFolderSelect = useCallback(async () => {

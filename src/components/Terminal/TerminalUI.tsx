@@ -46,35 +46,57 @@ export function TerminalUI(props: TerminalUIProps): JSX.Element {
   const searchRef = useRef<{ removeAllHighlights: () => void } | null>(null);
   const [isSearchVisible, setIsSearchVisible] = useState(false);
 
-  const handleClearHistory = useCallback(() => {
-    searchRef.current?.removeAllHighlights?.();
-    props.setHistory([]);
-    props.setContentKey(prev => prev + 1);
-  }, [props.setHistory, props.setContentKey]);
+  // Modifions le gestionnaire de raccourci clavier pour débugger et corriger le comportement
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (!e.ctrlKey || e.key !== 'f') return;
 
+      const target = e.target as HTMLElement;
+      const terminalContainer = document.querySelector('.terminal-container');
+      
+      console.log('Debug search shortcut:', {
+        target: target.tagName,
+        isInsideTerminal: target.closest('.terminal-container') !== null,
+        terminalTabIndex: terminalContainer?.getAttribute('tabindex'),
+        activeElement: document.activeElement?.tagName,
+        isTerminalFocused
+      });
+
+      // On n'intercepte que si on est dans le terminal ET qu'il est focalisé
+      const isTargetInTerminal = target.closest('.terminal-container') !== null;
+      const hasTerminalFocus = terminalContainer?.getAttribute('tabindex') === '0';
+
+      if (isTargetInTerminal && hasTerminalFocus && isTerminalFocused) {
+        console.log('Activating terminal search');
+        e.preventDefault();
+        setIsSearchVisible(true);
+      } else {
+        console.log('Letting browser handle search');
+        // Laisser le navigateur gérer le Ctrl+F
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [isTerminalFocused]);
+
+  // Améliorons également les gestionnaires de focus/blur
   const handleFocus = useCallback(() => {
+    console.log('Terminal focused');
     setIsTerminalFocused(true);
   }, []);
 
   const handleBlur = useCallback((e: React.FocusEvent) => {
-    if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+    const relatedTarget = e.relatedTarget as HTMLElement | null;
+    console.log('Terminal blur:', {
+      relatedTarget: relatedTarget?.tagName,
+      isContained: e.currentTarget.contains(relatedTarget)
+    });
+    
+    if (!e.currentTarget.contains(relatedTarget)) {
       setIsTerminalFocused(false);
     }
   }, []);
-
-  const handleKeyDown = useCallback((e: KeyboardEvent) => {
-    if (e.ctrlKey && e.key === 'f') {
-      e.preventDefault();
-      setIsSearchVisible(true);
-    } else if (e.key === 'Escape') {
-      setIsSearchVisible(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleKeyDown]);
 
   const tooltipStyle = "bg-[#252526] text-[#d4d4d4] border border-[#333] shadow-md";
 
@@ -107,6 +129,13 @@ export function TerminalUI(props: TerminalUIProps): JSX.Element {
   const terminalClasses = `fixed bg-[#1e1e1e] text-[#d4d4d4] border-t border-[#333] shadow-lg transition-all duration-200 ${
     props.isFullscreen ? 'top-0 left-0 right-0 bottom-0 z-50' : 'bottom-0 left-0 right-0'
   }`;
+
+  // Déplacer handleClearHistory avant son utilisation
+  const handleClearHistory = useCallback(() => {
+    searchRef.current?.removeAllHighlights?.();
+    props.setHistory([]);
+    props.setContentKey(prev => prev + 1);
+  }, [props.setHistory, props.setContentKey]);
 
   return (
     <div
@@ -313,7 +342,7 @@ export function TerminalUI(props: TerminalUIProps): JSX.Element {
                           variant="ghost"
                           size="icon"
                           className="h-8 w-8 bg-[#1e1e1e] hover:bg-[#333] text-[#d4d4d4] hover:text-[#fff] transition-colors"
-                          onClick={handleClearHistory}
+                          onClick={handleClearHistory} // Maintenant handleClearHistory est défini
                         >
                           <History className="h-4 w-4 lucide" />
                         </Button>

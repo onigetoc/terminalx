@@ -118,36 +118,28 @@ const TerminalSearch = ({ isVisible, onClose, terminalRef, history }: TerminalSe
     scrollToCurrentMatch();
   };
 
-  // Focus l'input de recherche quand il devient visible
+  // Focus l'input de recherche à chaque fois que isVisible change ou qu'on fait Ctrl+F
   useEffect(() => {
-    if (searchInputRef.current) {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.ctrlKey && e.key === 'f' && searchInputRef.current) {
+        e.preventDefault();
+        searchInputRef.current.focus();
+        searchInputRef.current.select();
+      }
+    };
+    
+    if (isVisible && searchInputRef.current) {
       searchInputRef.current.focus();
       searchInputRef.current.select();
     }
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
   }, [isVisible]);
 
-  // Gestion des raccourcis clavier
+  // Gestion des raccourcis clavier quand l'input est actif
   useEffect(() => {
     const handleKeydown = (e: KeyboardEvent) => {
-      if (e.ctrlKey && e.key === 'f') {
-        e.preventDefault();
-        if (searchInputRef.current) {
-          searchInputRef.current.focus();
-          searchInputRef.current.select();
-        }
-        return;
-      }
-
-      if (!searchInputRef.current?.contains(document.activeElement)) {
-        return;
-      }
-
-      if (isVisible && e.key === 'Escape') {
-        e.preventDefault();
-        onClose();
-        return;
-      }
-
       if (isVisible && totalMatches > 0) {
         if (e.key === 'Enter') {
           e.preventDefault();
@@ -159,6 +151,12 @@ const TerminalSearch = ({ isVisible, onClose, terminalRef, history }: TerminalSe
           e.preventDefault();
           handleNext();
         }
+      }
+
+      if (isVisible && e.key === 'Escape') {
+        e.preventDefault();
+        onClose();
+        return;
       }
     };
 
