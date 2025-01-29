@@ -185,7 +185,9 @@ export function FormattedOutput({ text, executeCommand }: FormattedOutputProps):
   return (
     <div className="terminal-output">
       {hasAnsiCodes ? (
-        <Ansi>{text}</Ansi>
+        <pre className="whitespace-pre-wrap break-words font-mono">
+          <Ansi>{text}</Ansi>
+        </pre>
       ) : (
         formatTextWithLinks(text, executeCommand)
       )}

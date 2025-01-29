@@ -118,51 +118,37 @@ const TerminalSearch = ({ isVisible, onClose, terminalRef, history }: TerminalSe
     scrollToCurrentMatch();
   };
 
-  // Focus l'input de recherche à chaque fois que isVisible change ou qu'on fait Ctrl+F
+  // Focus quand l'input de recherche devient visible
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.ctrlKey && e.key === 'f' && searchInputRef.current) {
-        e.preventDefault();
-        searchInputRef.current.focus();
-        searchInputRef.current.select();
-      }
-    };
-    
     if (isVisible && searchInputRef.current) {
       searchInputRef.current.focus();
       searchInputRef.current.select();
     }
-
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
   }, [isVisible]);
 
-  // Gestion des raccourcis clavier quand l'input est actif
-  useEffect(() => {
-    const handleKeydown = (e: KeyboardEvent) => {
-      if (isVisible && totalMatches > 0) {
-        if (e.key === 'Enter') {
-          e.preventDefault();
-          handleNext();
-        } else if (e.key === 'ArrowUp') {
-          e.preventDefault();
-          handlePrevious();
-        } else if (e.key === 'ArrowDown') {
-          e.preventDefault();
-          handleNext();
-        }
-      }
-
-      if (isVisible && e.key === 'Escape') {
+  // Gestion des raccourcis clavier pour la navigation dans les résultats
+  const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    // Empêcher la propagation de tous les événements clavier
+    e.stopPropagation();
+    
+    if (totalMatches > 0) {
+      if (e.key === 'Enter') {
         e.preventDefault();
-        onClose();
-        return;
+        handleNext();
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        handlePrevious();
+      } else if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        handleNext();
       }
-    };
+    }
 
-    document.addEventListener('keydown', handleKeydown);
-    return () => document.removeEventListener('keydown', handleKeydown);
-  }, [isVisible, totalMatches, currentMatch, onClose]);
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      onClose();
+    }
+  };
 
   // Mise à jour des résultats de recherche
   useEffect(() => {
@@ -174,7 +160,7 @@ const TerminalSearch = ({ isVisible, onClose, terminalRef, history }: TerminalSe
     } else {
       highlightMatches();
     }
-  }, [searchText, history]); // La dépendance à history est importante pour détecter les changements de contenu
+  }, [searchText, history]);
 
   // Défilement vers l'occurrence actuelle
   useEffect(() => {
@@ -217,16 +203,19 @@ const TerminalSearch = ({ isVisible, onClose, terminalRef, history }: TerminalSe
   if (!isVisible) return <></>;
 
   return (
-    <div className={`search-container absolute right-2 top-2 bg-[#252526] border border-[#383838] transition-opacity flex items-center p-2 shadow-lg z-50 mr-2  mt-20 ${isVisible ? 'visible' : 'invisible'}`}>
+    <div 
+      className={`search-container absolute right-2 top-2 bg-[#252526] border border-[#383838] transition-opacity flex items-center p-2 shadow-lg z-50 mr-2 mt-20 ${isVisible ? 'visible' : 'invisible'}`}
+      onClick={(e) => e.stopPropagation()}
+    >
       <Search className="w-4 h-4 text-gray-400 lucide mr-2" />
       <input
         ref={searchInputRef}
         type="text"
         value={searchText}
         onChange={(e) => setSearchText(e.target.value)}
+        onKeyDown={handleSearchKeyDown}
         className="w-40 bg-transparent border-none rounded-xl text-[#d4d4d4] text-sm px-2 outline-none focus:outline-none placeholder-[#666] transition-opacity duration-200 opacity-100"
         placeholder="Find in terminal..."
-        onMouseDown={(e) => e.stopPropagation()}
       />
       <span className="text-[#8a8a8a] text-sm px-2">
         {totalMatches > 0 ? `${currentMatch + 1}/${totalMatches}` : '0/0'}

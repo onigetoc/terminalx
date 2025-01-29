@@ -69,9 +69,13 @@
   position: relative;
 }
 
-/* Hide the links output when ANSI content is present */
-.terminal-output pre:not(:only-child):last-child {
-  display: none;
+.terminal-output pre {
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  font-family: inherit;
+  margin: 0;
+  padding: 0;
+  tab-size: 4;
 }
 
 /* ANSI Colors */

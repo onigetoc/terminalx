@@ -48,37 +48,35 @@ export function TerminalUI(props: TerminalUIProps): JSX.Element {
 
   // Modifions le gestionnaire de raccourci clavier pour débugger et corriger le comportement
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (!e.ctrlKey || e.key !== 'f') return;
+    const handleKeyDown = (e: Event) => {
+      const keyboardEvent = e as KeyboardEvent;
+      // Ne rien faire si la recherche est visible
+      if (isSearchVisible) return;
 
-      const target = e.target as HTMLElement;
-      const terminalContainer = document.querySelector('.terminal-container');
-      
-      console.log('Debug search shortcut:', {
-        target: target.tagName,
-        isInsideTerminal: target.closest('.terminal-container') !== null,
-        terminalTabIndex: terminalContainer?.getAttribute('tabindex'),
-        activeElement: document.activeElement?.tagName,
-        isTerminalFocused
-      });
+      if (keyboardEvent.ctrlKey && keyboardEvent.key === 'f') {
+        const target = keyboardEvent.target as HTMLElement;
+        const terminalContainer = document.querySelector('.terminal-container');
+        
+        // Vérifie si l'événement vient du terminal
+        const isTargetInTerminal = target.closest('.terminal-container') !== null;
+        const hasTerminalFocus = terminalContainer?.getAttribute('tabindex') === '0' && isTerminalFocused;
 
-      // On n'intercepte que si on est dans le terminal ET qu'il est focalisé
-      const isTargetInTerminal = target.closest('.terminal-container') !== null;
-      const hasTerminalFocus = terminalContainer?.getAttribute('tabindex') === '0';
-
-      if (isTargetInTerminal && hasTerminalFocus && isTerminalFocused) {
-        console.log('Activating terminal search');
-        e.preventDefault();
-        setIsSearchVisible(true);
-      } else {
-        console.log('Letting browser handle search');
-        // Laisser le navigateur gérer le Ctrl+F
+        if (isTargetInTerminal && hasTerminalFocus) {
+          keyboardEvent.preventDefault();
+          keyboardEvent.stopPropagation();
+          setIsSearchVisible(true);
+        }
       }
     };
 
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [isTerminalFocused]);
+    // Attache l'événement au conteneur du terminal plutôt qu'au document
+    const terminalContainer = document.querySelector('.terminal-container');
+    if (terminalContainer) {
+      terminalContainer.addEventListener('keydown', handleKeyDown as EventListener);
+      return () => terminalContainer.removeEventListener('keydown', handleKeyDown as EventListener);
+    }
+    return undefined;
+  }, [isTerminalFocused, isSearchVisible]);
 
   // Améliorons également les gestionnaires de focus/blur
   const handleFocus = useCallback(() => {
@@ -88,10 +86,11 @@ export function TerminalUI(props: TerminalUIProps): JSX.Element {
 
   const handleBlur = useCallback((e: React.FocusEvent) => {
     const relatedTarget = e.relatedTarget as HTMLElement | null;
-    console.log('Terminal blur:', {
-      relatedTarget: relatedTarget?.tagName,
-      isContained: e.currentTarget.contains(relatedTarget)
-    });
+    
+    // Ne pas perdre le focus si on passe à l'input de recherche
+    if (relatedTarget?.closest('.search-container')) {
+      return;
+    }
     
     if (!e.currentTarget.contains(relatedTarget)) {
       setIsTerminalFocused(false);
