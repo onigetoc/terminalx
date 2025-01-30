@@ -43,40 +43,37 @@ interface TerminalUIProps {
 
 export function TerminalUI(props: TerminalUIProps): JSX.Element {
   const [isTerminalFocused, setIsTerminalFocused] = React.useState(false);
-  const searchRef = useRef<{ removeAllHighlights: () => void } | null>(null);
+  const searchRef = useRef<{ removeAllHighlights: () => void; focus: () => void } | null>(null);
   const [isSearchVisible, setIsSearchVisible] = useState(false);
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
-  // Modifions le gestionnaire de raccourci clavier pour débugger et corriger le comportement
+  // Gestion du raccourci clavier Ctrl+F pour la recherche
   useEffect(() => {
     const handleKeyDown = (e: Event) => {
       const keyboardEvent = e as KeyboardEvent;
-      // Ne rien faire si la recherche est visible
-      if (isSearchVisible) return;
+      
+      // Vérifier uniquement si le conteneur du terminal a le focus via son tabindex
+      const terminalContainer = document.querySelector('.terminal-container');
+      const hasTerminalFocus = terminalContainer?.getAttribute('tabindex') === '0' && isTerminalFocused;
 
+      // Si le terminal n'a pas le focus, on n'active pas la recherche
+      if (!hasTerminalFocus) return;
+
+      // Activer la recherche et focuser l'input si on utilise Ctrl+F
       if (keyboardEvent.ctrlKey && keyboardEvent.key === 'f') {
-        const target = keyboardEvent.target as HTMLElement;
-        const terminalContainer = document.querySelector('.terminal-container');
-        
-        // Vérifie si l'événement vient du terminal
-        const isTargetInTerminal = target.closest('.terminal-container') !== null;
-        const hasTerminalFocus = terminalContainer?.getAttribute('tabindex') === '0' && isTerminalFocused;
-
-        if (isTargetInTerminal && hasTerminalFocus) {
-          keyboardEvent.preventDefault();
-          keyboardEvent.stopPropagation();
-          setIsSearchVisible(true);
-        }
+        keyboardEvent.preventDefault();
+        keyboardEvent.stopPropagation();
+        setIsSearchVisible(true);
+        setTimeout(() => {
+          searchRef.current?.focus();
+        }, 0);
       }
     };
 
-    // Attache l'événement au conteneur du terminal plutôt qu'au document
-    const terminalContainer = document.querySelector('.terminal-container');
-    if (terminalContainer) {
-      terminalContainer.addEventListener('keydown', handleKeyDown as EventListener);
-      return () => terminalContainer.removeEventListener('keydown', handleKeyDown as EventListener);
-    }
-    return undefined;
-  }, [isTerminalFocused, isSearchVisible]);
+    // Attacher l'événement au niveau du document pour capturer Ctrl+F partout
+    document.addEventListener('keydown', handleKeyDown as EventListener);
+    return () => document.removeEventListener('keydown', handleKeyDown as EventListener);
+  }, [isTerminalFocused]);
 
   // Améliorons également les gestionnaires de focus/blur
   const handleFocus = useCallback(() => {
@@ -96,6 +93,25 @@ export function TerminalUI(props: TerminalUIProps): JSX.Element {
       setIsTerminalFocused(false);
     }
   }, []);
+
+  // Gestionnaire pour l'input du terminal
+  const handleTerminalInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    // Vérifier que l'événement vient de l'input du terminal et que la recherche n'est pas visible
+    if (e.currentTarget.classList.contains('terminal-command-input') && !isSearchVisible) {
+      if (e.key === 'Enter') {
+        e.preventDefault(); // Empêcher le comportement par défaut
+        e.stopPropagation(); // Empêcher la propagation vers d'autres gestionnaires
+        props.handleSubmit(e);
+        
+        // Force le scroll en bas après l'exécution de la commande
+        setTimeout(() => {
+          if (props.terminalRef.current) {
+            props.terminalRef.current.scrollTop = props.terminalRef.current.scrollHeight;
+          }
+        }, 0);
+      }
+    }
+  };
 
   const tooltipStyle = "bg-[#252526] text-[#d4d4d4] border border-[#333] shadow-md";
 
@@ -261,6 +277,7 @@ export function TerminalUI(props: TerminalUIProps): JSX.Element {
             key={props.contentKey}
           >
             <TerminalSearch
+              ref={searchRef}
               isVisible={isSearchVisible}
               onClose={() => setIsSearchVisible(false)}
               terminalRef={props.terminalRef}
@@ -310,6 +327,7 @@ export function TerminalUI(props: TerminalUIProps): JSX.Element {
                     type="text"
                     value={props.command}
                     onChange={(e) => props.setCommand(e.target.value)}
+                    onKeyDown={handleTerminalInputKeyDown}
                     className="terminal-command-input flex-1 bg-transparent border-none outline-none text-[#d4d4d4] font-mono"
                     placeholder="Type a command..."
                     autoFocus

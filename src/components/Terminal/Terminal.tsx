@@ -147,9 +147,24 @@ const Terminal: React.FC<TerminalProps> = ({ config = {} }) => {
 
   const handleSubmit = useCallback((e: React.FormEvent) => {
     e.preventDefault();
+    e.stopPropagation();
+    
     if (command.trim()) {
+      // Capturer l'événement natif pour empêcher toute propagation
+      const nativeEvent = e.nativeEvent;
+      if (nativeEvent instanceof Event) {
+        nativeEvent.stopImmediatePropagation();
+      }
+      
       executeCommand(command);
       setCommand('');
+      
+      // Forcer le scroll en bas après l'exécution de la commande avec un délai plus long
+      setTimeout(() => {
+        if (terminalRef.current) {
+          terminalRef.current.scrollTop = terminalRef.current.scrollHeight;
+        }
+      }, 100); // Un délai plus long pour s'assurer que tout le contenu est chargé
     }
   }, [command, executeCommand]);
 

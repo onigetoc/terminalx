@@ -1,6 +1,11 @@
-import { useEffect, useRef, useState } from 'react';
+import { forwardRef, useEffect, useRef, useState, useImperativeHandle } from 'react';
 import { Button } from "@/components/ui/button";
 import { Search, ArrowUp, ArrowDown, X } from 'lucide-react';
+
+export interface TerminalSearchRef {
+  focus: () => void;
+  removeAllHighlights: () => void;
+}
 
 interface TerminalSearchProps {
   isVisible: boolean;
@@ -15,12 +20,22 @@ interface SearchMatch {
   length: number;
 }
 
-const TerminalSearch = ({ isVisible, onClose, terminalRef, history }: TerminalSearchProps): JSX.Element => {
+const TerminalSearch = forwardRef<TerminalSearchRef, TerminalSearchProps>(({ isVisible, onClose, terminalRef, history }, ref) => {
   const [searchText, setSearchText] = useState('');
   const [currentMatch, setCurrentMatch] = useState(0);
   const [totalMatches, setTotalMatches] = useState(0);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const matchesRef = useRef<SearchMatch[]>([]);
+
+  useImperativeHandle(ref, () => ({
+    focus: () => {
+      if (searchInputRef.current) {
+        searchInputRef.current.focus();
+        searchInputRef.current.select();
+      }
+    },
+    removeAllHighlights: clearHighlights
+  }));
 
   const clearHighlights = () => {
     const content = terminalRef.current;
@@ -128,19 +143,28 @@ const TerminalSearch = ({ isVisible, onClose, terminalRef, history }: TerminalSe
 
   // Gestion des raccourcis clavier pour la navigation dans les résultats
   const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    // Empêcher la propagation de tous les événements clavier
+    // Ne traiter les événements que si l'input de recherche a le focus
+    if (document.activeElement !== searchInputRef.current) return;
+
+    // Empêcher la propagation au niveau natif
+    e.nativeEvent.stopImmediatePropagation();
     e.stopPropagation();
     
+    // Gérer les événements de navigation uniquement si nous avons des résultats
     if (totalMatches > 0) {
-      if (e.key === 'Enter') {
-        e.preventDefault();
-        handleNext();
-      } else if (e.key === 'ArrowUp') {
-        e.preventDefault();
-        handlePrevious();
-      } else if (e.key === 'ArrowDown') {
-        e.preventDefault();
-        handleNext();
+      switch (e.key) {
+        case 'Enter':
+          e.preventDefault();
+          handleNext();
+          break;
+        case 'ArrowUp':
+          e.preventDefault();
+          handlePrevious();
+          break;
+        case 'ArrowDown':
+          e.preventDefault();
+          handleNext();
+          break;
       }
     }
 
@@ -250,6 +274,6 @@ const TerminalSearch = ({ isVisible, onClose, terminalRef, history }: TerminalSe
       </div>
     </div>
   );
-};
+});
 
 export default TerminalSearch;
