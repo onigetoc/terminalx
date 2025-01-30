@@ -12,10 +12,14 @@ export const executeCommand = async (command: string) => {
     const pathArg = cmd.slice(2).trim();
     let targetPath;
 
-    if (!pathArg || pathArg === '~') {
+    // Handle various cd commands
+    if (!pathArg) {
+      // 'cd' by itself goes to home directory
       targetPath = os.homedir();
-    } else if (pathArg === '..' || pathArg === '../') {
-      targetPath = path.join(currentWorkingDirectory, '..');
+    } else if (pathArg === '~') {
+      targetPath = os.homedir();
+    } else if (pathArg === '..' || pathArg === '../' || cmd === 'cd..') {
+      targetPath = path.resolve(currentWorkingDirectory, '..');
     } else {
       targetPath = path.resolve(currentWorkingDirectory, pathArg);
     }
@@ -23,6 +27,7 @@ export const executeCommand = async (command: string) => {
     try {
       process.chdir(targetPath);
       currentWorkingDirectory = process.cwd();
+      
       return {
         output: `Directory changed to ${currentWorkingDirectory}`,
         currentDirectory: currentWorkingDirectory

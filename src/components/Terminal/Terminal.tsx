@@ -46,8 +46,37 @@ const Terminal: React.FC<TerminalProps> = ({ config = {} }) => {
       return 'Unknown OS';
     };
 
-    setOsInfo(detectOS());
+    const os = detectOS();
+    setOsInfo(os);
+
+    // Initialize directory
+    async function initDirectory() {
+      try {
+        const savedDir = localStorage.getItem('terminalDirectory');
+        if (savedDir) {
+          setCurrentDirectory(savedDir);
+        } else {
+          // Set default directory based on OS
+          const defaultPath = os === 'Windows' ? 'C:\\Users' : '/home';
+          setCurrentDirectory(defaultPath);
+          localStorage.setItem('terminalDirectory', defaultPath);
+        }
+      } catch (error) {
+        console.error('Directory initialization error:', error);
+        // Fallback to a safe default
+        setCurrentDirectory(os === 'Windows' ? 'C:\\Users' : '/home');
+      }
+    }
+    
+    initDirectory();
   }, []);
+
+  // Persist directory changes to localStorage
+  useEffect(() => {
+    if (currentDirectory) {
+      localStorage.setItem('terminalDirectory', currentDirectory);
+    }
+  }, [currentDirectory]);
 
   const executeCommand = useCallback(async (cmd: string | string[], displayInTerminal: number = 1) => {
     const commands = Array.isArray(cmd) ? cmd : [cmd];
@@ -92,8 +121,9 @@ const Terminal: React.FC<TerminalProps> = ({ config = {} }) => {
         }
 
         // Gérer les changements de répertoire pour les commandes serveur
-        if (command.toLowerCase().startsWith('cd ') && result.currentDirectory) {
+        if ((command.toLowerCase().startsWith('cd') || command.toLowerCase() === 'cd..' || command.toLowerCase() === 'cd ..') && result.currentDirectory) {
           setCurrentDirectory(result.currentDirectory);
+          localStorage.setItem('terminalDirectory', result.currentDirectory);
         }
       } catch (error) {
         if (displayInTerminal) {
@@ -198,6 +228,7 @@ const Terminal: React.FC<TerminalProps> = ({ config = {} }) => {
       const data = await response.json();
       if (data.currentDirectory) {
         setCurrentDirectory(data.currentDirectory);
+        localStorage.setItem('terminalDirectory', data.currentDirectory);
       }
     } catch (error) {
       console.error('Error getting current directory:', error);
