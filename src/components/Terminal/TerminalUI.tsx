@@ -152,6 +152,12 @@ export function TerminalUI(props: TerminalUIProps): JSX.Element {
     props.setContentKey(prev => prev + 1);
   }, [props.setHistory, props.setContentKey]);
 
+  // Mettre à jour le gestionnaire de fermeture de recherche
+  const handleCloseSearch = useCallback(() => {
+    setIsSearchVisible(false);
+    searchRef.current?.removeAllHighlights?.();
+  }, []);
+
   return (
     <div
       className={`terminal-container ${terminalClasses}`}
@@ -279,7 +285,7 @@ export function TerminalUI(props: TerminalUIProps): JSX.Element {
             <TerminalSearch
               ref={searchRef}
               isVisible={isSearchVisible}
-              onClose={() => setIsSearchVisible(false)}
+              onClose={handleCloseSearch}  // Utiliser handleCloseSearch au lieu de setIsSearchVisible
               terminalRef={props.terminalRef}
               history={props.history}
             />

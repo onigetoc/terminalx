@@ -200,6 +200,25 @@ const TerminalSearch = forwardRef<TerminalSearchRef, TerminalSearchProps>(({ isV
     };
   }, []);
 
+  // Ajout d'un gestionnaire pour nettoyer lors de la fermeture
+  const handleClose = () => {
+    clearHighlights();
+    setSearchText('');
+    setCurrentMatch(0);
+    setTotalMatches(0);
+    onClose();
+  };
+
+  // Mise à jour des effets pour gérer la visibilité
+  useEffect(() => {
+    if (!isVisible) {
+      clearHighlights();
+      setSearchText('');
+      setCurrentMatch(0);
+      setTotalMatches(0);
+    }
+  }, [isVisible]);
+
   const handleNext = () => {
     if (totalMatches === 0) return;
     
@@ -267,7 +286,7 @@ const TerminalSearch = forwardRef<TerminalSearchRef, TerminalSearchProps>(({ isV
           variant="ghost"
           size="icon"
           className="hover:bg-[#2a2d2e] rounded disabled:opacity-50"
-          onClick={onClose}
+          onClick={handleClose}  // Remplacer onClose par handleClose
         >
           <X className="w-4 h-4 lucide" />
         </Button>
