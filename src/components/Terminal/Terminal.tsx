@@ -97,15 +97,13 @@ const Terminal: React.FC<TerminalProps> = ({ config = {} }) => {
         const trimmedCommand = command.trim().toLowerCase();
         let result: CommandResult;
 
-        // Gérer les commandes de clair
         if (trimmedCommand === 'clear' || trimmedCommand === 'cls') {
-          setHistory([]); // Effacer l'historique immédiatement
+          setHistory([]);
           setCommand('');
           setContentKey(prev => prev + 1);
-          return; // Sortir tôt pour les commandes de clair
+          return;
         } 
 
-        // Traiter les autres commandes
         if (isCustomCommand(command)) {
           result = await executeCustomCommand(command);
         } else {
@@ -127,11 +125,17 @@ const Terminal: React.FC<TerminalProps> = ({ config = {} }) => {
           setTimeout(scrollToBottom, 0);
         }
 
-        // Gérer les changements de répertoire pour les commandes serveur
-        if ((command.toLowerCase().startsWith('cd') || command.toLowerCase() === 'cd..' || command.toLowerCase() === 'cd ..') && result.currentDirectory) {
+        // Ne mettre à jour le répertoire que si la commande cd réussit
+        // (c'est-à-dire pas d'erreur dans la sortie et un nouveau répertoire est fourni)
+        if ((command.toLowerCase().startsWith('cd') || command.toLowerCase() === 'cd..' || command.toLowerCase() === 'cd ..') 
+            && result.currentDirectory 
+            && !result.output.includes('no such file or directory')
+            && !result.output.includes('not found')
+            && !result.output.includes('error')) {
           setCurrentDirectory(result.currentDirectory);
           localStorage.setItem('terminalDirectory', result.currentDirectory);
         }
+
       } catch (error) {
         if (displayInTerminal) {
           setHistory(prev => {
@@ -225,19 +229,35 @@ const Terminal: React.FC<TerminalProps> = ({ config = {} }) => {
   }, [executeCommand]);
 
   const onFolderSelect = useCallback(async () => {
-    try {
-      const response = await fetch('http://localhost:3002/current-directory', {
-        method: 'GET'
-      });
-      const data = await response.json();
-      if (data.currentDirectory) {
-        setCurrentDirectory(data.currentDirectory);
-        localStorage.setItem('terminalDirectory', data.currentDirectory);
-      }
-    } catch (error) {
-      console.error('Error getting current directory:', error);
+    if (!('showDirectoryPicker' in window)) {
+      setHistory(prev => [...prev, {
+        command: '',
+        output: 'Your browser does not support directory selection. Please use a modern browser like Chrome or Edge.',
+        isLoading: false
+      }]);
+      return;
     }
-  }, []);
+
+    try {
+      const directoryHandle = await window.showDirectoryPicker();
+      const folderPath = directoryHandle.name;
+      
+      // Exécuter la commande cd et attendre la réponse
+      await executeCommand(`cd ${folderPath}`);
+      
+      // Le chemin sera mis à jour automatiquement par executeCommand 
+      // seulement si la commande réussit
+      
+    } catch (error) {
+      if (error.name !== 'AbortError') {
+        setHistory(prev => [...prev, {
+          command: '',
+          output: `Error selecting directory: ${error.message}`,
+          isLoading: false
+        }]);
+      }
+    }
+  }, [executeCommand]);
 
   return (
     <TerminalUI
