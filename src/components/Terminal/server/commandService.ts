@@ -2,7 +2,16 @@ import { spawn } from 'child_process';
 import path from 'path';
 import os from 'os';
 
-let currentWorkingDirectory = process.cwd();
+// Initialize working directory to user's home directory on server start
+let currentWorkingDirectory = os.homedir();
+
+// Ensure we're actually in the home directory
+try {
+  process.chdir(currentWorkingDirectory);
+} catch (error) {
+  console.error('Failed to set initial directory to home, using current directory instead:', error);
+  currentWorkingDirectory = process.cwd();
+}
 
 export const executeCommand = async (command: string) => {
   const cmd = command.trim();

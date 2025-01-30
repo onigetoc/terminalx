@@ -49,22 +49,29 @@ const Terminal: React.FC<TerminalProps> = ({ config = {} }) => {
     const os = detectOS();
     setOsInfo(os);
 
-    // Initialize directory
+    // Initialize directory from server if no saved directory exists
     async function initDirectory() {
       try {
         const savedDir = localStorage.getItem('terminalDirectory');
         if (savedDir) {
           setCurrentDirectory(savedDir);
         } else {
-          // Set default directory based on OS
-          const defaultPath = os === 'Windows' ? 'C:\\Users' : '/home';
-          setCurrentDirectory(defaultPath);
-          localStorage.setItem('terminalDirectory', defaultPath);
+          // Get initial directory from server
+          const response = await fetch('http://localhost:3002/current-directory');
+          const data = await response.json();
+          if (data.currentDirectory) {
+            setCurrentDirectory(data.currentDirectory);
+            localStorage.setItem('terminalDirectory', data.currentDirectory);
+          }
         }
       } catch (error) {
         console.error('Directory initialization error:', error);
-        // Fallback to a safe default
-        setCurrentDirectory(os === 'Windows' ? 'C:\\Users' : '/home');
+        // Let the user know there was an error
+        setHistory(prev => [...prev, {
+          command: '',
+          output: 'Error initializing terminal directory. Please try refreshing the page.',
+          isLoading: false
+        }]);
       }
     }
     
@@ -117,7 +124,7 @@ const Terminal: React.FC<TerminalProps> = ({ config = {} }) => {
             };
             return newHistory;
           });
-          setTimeout(scrollToBottom, 0); // S'assurer que le DOM est mis à jour
+          setTimeout(scrollToBottom, 0);
         }
 
         // Gérer les changements de répertoire pour les commandes serveur
@@ -180,7 +187,6 @@ const Terminal: React.FC<TerminalProps> = ({ config = {} }) => {
     e.stopPropagation();
     
     if (command.trim()) {
-      // Capturer l'événement natif pour empêcher toute propagation
       const nativeEvent = e.nativeEvent;
       if (nativeEvent instanceof Event) {
         nativeEvent.stopImmediatePropagation();
@@ -189,12 +195,11 @@ const Terminal: React.FC<TerminalProps> = ({ config = {} }) => {
       executeCommand(command);
       setCommand('');
       
-      // Forcer le scroll en bas après l'exécution de la commande avec un délai plus long
       setTimeout(() => {
         if (terminalRef.current) {
           terminalRef.current.scrollTop = terminalRef.current.scrollHeight;
         }
-      }, 100); // Un délai plus long pour s'assurer que tout le contenu est chargé
+      }, 100);
     }
   }, [command, executeCommand]);
 
@@ -209,7 +214,6 @@ const Terminal: React.FC<TerminalProps> = ({ config = {} }) => {
   }, []);
 
   const formatOutput = useCallback((output: string): JSX.Element => {
-    // Si la sortie est vide, ne rien afficher
     if (!output.trim()) {
       return <></>;
     }
