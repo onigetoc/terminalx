@@ -158,6 +158,11 @@ export function TerminalUI(props: TerminalUIProps): JSX.Element {
     searchRef.current?.removeAllHighlights?.();
   }, []);
 
+  // Simplifier handleClose
+  const handleClose = useCallback(() => {
+    props.setIsOpen(false);
+  }, [props.setIsOpen]);
+
   return (
     <div
       className={`terminal-container ${terminalClasses}`}
@@ -256,7 +261,7 @@ export function TerminalUI(props: TerminalUIProps): JSX.Element {
                       variant="ghost"
                       size="icon"
                       className="bg-transparent border-none hover:bg-red-900/70 text-[#d4d4d4] hover:text-[#fff] h-6 w-6 transition-colors"
-                      onClick={() => props.setIsOpen(false)}
+                      onClick={handleClose} // Utiliser handleClose ici
                     >
                       <X className="h-4 w-4 lucide" />
                     </Button>
@@ -300,7 +305,7 @@ export function TerminalUI(props: TerminalUIProps): JSX.Element {
                   (props.contentRef as { current: HTMLElement | null }).current = element;
                 }
               }}
-              className="terminal-scrollbar overflow-y-auto p-4 relative" 
+              className="terminal-scrollbar bg-stone-900 overflow-y-auto p-4 relative" 
               style={{ height: 'calc(100% - 80px)' }}
             >
               {props.history.map((entry, index) => (

@@ -5,16 +5,29 @@ import { executeCommand, getCurrentDirectory } from './commandService';
 const app = express();
 const port = 3002;
 
+// Configure middleware
 app.use(cors());
 app.use(express.json());
+
+// Set response headers for all routes
+app.use((req: Request, res: Response, next) => {
+  res.header('Content-Type', 'application/json; charset=utf-8');
+  next();
+});
 
 app.post('/execute', async (req: Request, res: Response) => {
   try {
     const { command } = req.body;
+    if (!command || typeof command !== 'string') {
+      return res.status(400).json({ error: 'Invalid command' });
+    }
     const result = await executeCommand(command);
     res.json(result);
-  } catch {
-    res.status(500).json({ error: 'Error executing command' });
+  } catch (error: any) {
+    res.status(500).json({ 
+      error: 'Error executing command',
+      details: error.message
+    });
   }
 });
 

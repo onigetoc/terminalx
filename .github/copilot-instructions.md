@@ -105,123 +105,72 @@ Rules:
 - Maintain changelog
 
 
-Créer une fonctionnalité de recherche dans le terminal qui permet à l'utilisateur de rechercher des mots ou des phrases dans le contenu du terminal, en excluant les éléments de la classe `terminal-command`. 
-La recherche doit être similaire à celle de Google Chrome, où les occurrences de la recherche sont mises en évidence avec un fond gris, et l'occurrence actuelle est mise en évidence avec un fond orange.
-Les CSS nécessaires sont déjà présents dans `terminal.css`.
-La recherche doit être effectuée via une boite de recherche qui ne recherche que dans le contenu du terminal.
-Lorsque l'utilisateur tape des lettres, la première occurrence doit être mise en évidence immédiatement, sans nécessité de presser Entrée.
-Lorsque l'utilisateur tape d'autres lettres, l'occurrence actuelle doit rester mise en évidence tant que les lettres correspondent.
-L'utilisateur doit pouvoir utiliser les flèches et la touche Entrée pour naviguer entre les occurrences.
-Le défilement doit être fonctionnel lorsque la recherche se trouve avant ou après l'occurrence actuelle.
-La fonctionnalité de recherche doit être exactement similaire à celle de la recherche dans une page Web avec Google Chrome ou dans le Terminal de VS Code.
-Les exigences fonctionnelles sont les suivantes :
-* Rechercher dans le contenu du terminal, en excluant les éléments de la classe `terminal-command`
-* Mettre en évidence les occurrences de la recherche avec un fond gris
-* Mettre en évidence l'occurrence actuelle avec un fond orange
-* Permettre à l'utilisateur de naviguer entre les occurrences à l'aide des flèches et de la touche Entrée
-* Faire défiler le contenu du terminal lorsque la recherche se trouve avant ou après l'occurrence actuelle
-* Mettre en évidence la première occurrence immédiatement lorsque l'utilisateur tape des lettres, sans nécessité de presser Entrée.
+Create a search functionality in the terminal that allows the user to search for words or phrases within the terminal content while excluding elements with the class terminal-command. The search should be similar to that in Google Chrome, where occurrences of the search are highlighted with a gray background, and the current occurrence is highlighted with an orange background. The necessary CSS is already present in terminal.css. The search should be conducted via a search box that only searches within the terminal content.
+
+When the user types letters, the first occurrence should be highlighted immediately, without the need to press Enter. When the user types additional letters, the current occurrence should remain highlighted as long as the letters match. The user should be able to navigate between occurrences using the arrow keys and the Enter key. Scrolling should work when the search is before or after the current occurrence.
+
+The search functionality should be exactly like that of a webpage search in Google Chrome or in the VS Code Terminal. The functional requirements are as follows:
+
+Search within the terminal content, excluding elements with the class terminal-command
+Highlight occurrences of the search with a gray background
+Highlight the current occurrence with an orange background
+Allow the user to navigate between occurrences using the arrow keys and the Enter key
+Scroll the terminal content when the search is before or after the current occurrence
+Immediately highlight the first occurrence when the user types letters, without needing to press Enter.
 
 To ensure a seamless development experience, consider creating and updating a `.cursorrules`, `.windsurfrules` or `.github/copilot-instructions.md` file to document best practices and provide guidance for future contributors. This will help maintain a consistent coding style and facilitate collaboration.
 
 
 ## Project structure tree
-- .github
-  - copilot-instructions.md
-- .gitignore
-- bun.lockb
-- components.json
-- eslint.config.js
-- index.html
-- package.json
-- postcss.config.js
-- project_structure.text
-- src
-  - App.css
-  - App.tsx
-  - components
-    - icons
-      - CustomFingerprint.tsx
-    - pages
-      - Index.tsx
-    - Terminal
-      - server
-        - commandService.ts
-        - index.ts
-      - services
-        - customCommands.ts
-        - terminalApi.ts
-      - styles
-        - index.css
-        - terminal.css
-      - Terminal.tsx
-      - TerminalSearch.tsx
-      - TerminalUI.tsx
-    - ui
-      - accordion.tsx
-      - alert-dialog.tsx
-      - alert.tsx
-      - aspect-ratio.tsx
-      - avatar.tsx
-      - badge.tsx
-      - breadcrumb.tsx
-      - button.tsx
-      - calendar.tsx
-      - card.tsx
-      - carousel.tsx
-      - chart.tsx
-      - checkbox.tsx
-      - collapsible.tsx
-      - command.tsx
-      - context-menu.tsx
-      - dialog.tsx
-      - drawer.tsx
-      - dropdown-menu.tsx
-      - form.tsx
-      - hover-card.tsx
-      - input-otp.tsx
-      - input.tsx
-      - label.tsx
-      - menubar.tsx
-      - navigation-menu.tsx
-      - pagination.tsx
-      - popover.tsx
-      - progress.tsx
-      - radio-group.tsx
-      - resizable.tsx
-      - scroll-area.tsx
-      - select.tsx
-      - separator.tsx
-      - sheet.tsx
-      - skeleton.tsx
-      - slider.tsx
-      - sonner.tsx
-      - switch.tsx
-      - table.tsx
-      - tabs.tsx
-      - textarea.tsx
-      - toast.tsx
-      - toaster.tsx
-      - toggle-group.tsx
-      - toggle.tsx
-      - tooltip.tsx
-  - config
-    - terminalConfig.ts
-  - hooks
-    - use-toast.ts
-  - index.css
-  - lib
-    - utils.ts
-  - main.tsx
-  - styles
-    - terminal.css
-  - utils
-    - commandUtils.ts
-    - terminalUtils.ts
-  - vite-env.d.ts
-- tailwind.config.js
-- tsconfig.app.json
-- tsconfig.json
-- tsconfig.node.json
-- tsconfig.server.json
-- vite.config.ts
+```
+terminal/
+├── components.json
+├── eslint.config.js
+├── index.html
+├── package.json
+├── postcss.config.js
+├── project_structure.text
+├── README.md
+├── src/
+│   ├── components/
+│   │   ├── Terminal/
+│   │   │   ├── config/
+│   │   │   │   └── terminalConfig.ts
+│   │   │   ├── server/
+│   │   │   │   ├── commandService.ts
+│   │   │   │   └── index.ts
+│   │   │   ├── services/
+│   │   │   │   ├── customCommands.ts
+│   │   │   │   ├── encodingUtils.txt
+│   │   │   │   ├── terminalApi.ts
+│   │   │   │   ├── terminalFormatter.tsx
+│   │   │   │   └── terminalFormatter.txt
+│   │   │   ├── styles/
+│   │   │   │   └── terminal.css
+│   │   │   ├── Terminal.tsx
+│   │   │   ├── TerminalSearch.tsx
+│   │   │   ├── TerminalUI.tsx
+│   │   │   └── utils/
+│   │   │       ├── commandOS.ts
+│   │   │       └── terminalUtils.ts
+│   │   └── ui/
+│   │       └── [UI Components].tsx
+│   ├── hooks/
+│   │   └── use-toast.ts
+│   ├── index.css
+│   ├── lib/
+│   │   └── utils.ts
+│   ├── main.tsx
+│   ├── pages/
+│   │   └── Index.tsx
+│   ├── styles/
+│   ├── types/
+│   │   └── window.d.ts
+│   └── vite-env.d.ts
+├── tailwind.config.js
+├── tsconfig.app.json
+├── tsconfig.json
+├── tsconfig.node.json
+├── tsconfig.server.json
+└── vite.config.ts
+```

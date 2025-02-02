@@ -9,6 +9,7 @@ const Index = () => {
     <div className="min-h-screen bg-background">
       <div className="container mx-auto p-4">
         <h1 className="text-4xl font-bold mb-4">Terminal Demo</h1>
+        <meta charSet="UTF-8"></meta> {/* Correction ici: charset -> charSet */}
         <p className="text-lg text-muted-foreground mb-4">
           Try running some commands like "npm -v" or type "help" to see available commands.
         </p>
@@ -69,7 +70,7 @@ const Index = () => {
           </Button>
           <Button
             variant="outline"
-            onClick={() => executeCommand('open "https://www.google.com/search?q=fake+terminal"')}
+            onClick={() => executeCommand('open https://www.google.com/search?q=fake+terminal')}
             className="flex items-center gap-2 border-gray-500"  // Voici la bonne classe Tailwind
           >
             <Globe className="h-4 w-4" />
@@ -77,7 +78,7 @@ const Index = () => {
           </Button>
           <Button
             variant="outline"
-            onClick={() => executeCommand(['explorer "https://github.com/onigetoc/fake-terminal-experience"'],0)}
+            onClick={() => executeCommand('start https://github.com/onigetoc/fake-terminal-experience',0)}
             className="flex items-center gap-2 border-gray-500"  // Voici la bonne classe Tailwind
           >
             <Globe className="h-4 w-4" />

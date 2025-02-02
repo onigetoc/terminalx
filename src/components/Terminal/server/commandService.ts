@@ -2,30 +2,33 @@ import { spawn } from 'child_process';
 import path from 'path';
 import os from 'os';
 
-// Initialize working directory to user's home directory on server start
+// Réinitialiser le répertoire de travail au démarrage du serveur
 let currentWorkingDirectory = os.homedir();
+process.chdir(currentWorkingDirectory);
 
-// Ensure we're actually in the home directory
-try {
-  process.chdir(currentWorkingDirectory);
-} catch (error) {
-  console.error('Failed to set initial directory to home, using current directory instead:', error);
-  currentWorkingDirectory = process.cwd();
-}
+// Ajout d'une fonction pour initialiser le répertoire
+export const initializeDirectory = (directory: string) => {
+  try {
+    process.chdir(directory);
+    currentWorkingDirectory = process.cwd();
+    return true;
+  } catch (error) {
+    // En cas d'erreur, revenir au répertoire personnel
+    currentWorkingDirectory = os.homedir();
+    process.chdir(currentWorkingDirectory);
+    console.error('Failed to initialize directory:', error);
+    return false;
+  }
+};
 
 export const executeCommand = async (command: string) => {
   const cmd = command.trim();
 
-  // Gestion spéciale de cd
   if (cmd.startsWith('cd')) {
     const pathArg = cmd.slice(2).trim();
     let targetPath;
 
-    // Handle various cd commands
     if (!pathArg) {
-      // 'cd' by itself goes to home directory
-      targetPath = os.homedir();
-    } else if (pathArg === '~') {
       targetPath = os.homedir();
     } else if (pathArg === '..' || pathArg === '../' || cmd === 'cd..') {
       targetPath = path.resolve(currentWorkingDirectory, '..');
@@ -36,7 +39,6 @@ export const executeCommand = async (command: string) => {
     try {
       process.chdir(targetPath);
       currentWorkingDirectory = process.cwd();
-      
       return {
         output: `Directory changed to ${currentWorkingDirectory}`,
         currentDirectory: currentWorkingDirectory
@@ -49,36 +51,36 @@ export const executeCommand = async (command: string) => {
     }
   }
 
-  // Utiliser spawn au lieu de exec pour préserver les codes ANSI
   return new Promise((resolve, reject) => {
     try {
-      // Split command into command and args
-      const parts = cmd.split(' ');
-      const program = parts[0];
-      const args = parts.slice(1);
-
-      const childProcess = spawn(program, args, {
-        cwd: currentWorkingDirectory,
-        shell: true,
-        env: {
-          ...process.env,
-          FORCE_COLOR: 'true', // Force les couleurs ANSI
-          TERM: 'xterm-256color' // Support complet des couleurs
+      const isWindows = process.platform === 'win32';
+      const shell = isWindows ? 'cmd.exe' : true;
+      const shellArgs = isWindows ? ['/d', '/s', '/c'] : [];
+      
+      // Passer la commande telle quelle, sans modification
+      const childProcess = spawn(
+        isWindows ? shell : cmd.split(' ')[0],
+        isWindows ? [...shellArgs, cmd] : cmd.split(' ').slice(1),
+        {
+          cwd: currentWorkingDirectory,
+          shell: !isWindows,
+          windowsHide: false,
+          env: { ...process.env, FORCE_COLOR: 'true', TERM: 'xterm-256color' }
         }
-      });
+      );
 
       let stdout = '';
       let stderr = '';
 
-      childProcess.stdout.on('data', (data) => {
+      childProcess.stdout?.on('data', (data) => {
         stdout += data.toString();
       });
 
-      childProcess.stderr.on('data', (data) => {
+      childProcess.stderr?.on('data', (data) => {
         stderr += data.toString();
       });
 
-      childProcess.on('close', (code) => {
+      childProcess.on('close', () => {
         resolve({
           output: stdout || stderr,
           currentDirectory: currentWorkingDirectory
@@ -88,11 +90,8 @@ export const executeCommand = async (command: string) => {
       childProcess.on('error', (error) => {
         reject(error);
       });
-    } catch (error: any) {
-      resolve({
-        output: error.message,
-        currentDirectory: currentWorkingDirectory
-      });
+    } catch (error) {
+      reject(error);
     }
   });
 };

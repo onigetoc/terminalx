@@ -162,7 +162,12 @@ export function translateCommand(command: string): string {
   const words = command.split(' ');
   const baseCommand = words[0].toLowerCase();
 
-  // Chercher si la commande existe dans notre mapping
+  // Debug logs pour voir ce qui se passe
+  console.log('OS détecté:', os);
+  console.log('Commande reçue:', command);
+  console.log('Commande de base:', baseCommand);
+
+  // Ne pas retourner immédiatement si URL - ça empêchait la traduction de 'open'
   const commandEntry = Object.entries(commandMap).find(([key, value]) => {
     return key === baseCommand || Object.values(value).includes(baseCommand);
   });
@@ -171,7 +176,9 @@ export function translateCommand(command: string): string {
     const [, mapping] = commandEntry;
     const translatedBase = mapping[os];
     words[0] = translatedBase;
-    return words.join(' ');
+    const translatedCommand = words.join(' ');
+    console.log('Commande traduite:', translatedCommand);
+    return translatedCommand;
   }
 
   return command;

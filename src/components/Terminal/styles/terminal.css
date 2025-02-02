@@ -83,8 +83,8 @@
 .ansi-red-fg { color: #cd3131; }
 .ansi-green-fg { color: #0dbc79; }
 .ansi-yellow-fg { color: #e5e510; }
-.ansi-blue-fg { color: #2472c8; }
-.ansi-magenta-fg { color: #bc3fbc; }
+.ansi-blue-fg { color: #3b8eea; }
+.ansi-magenta-fg { color: #ce51ce; }
 .ansi-cyan-fg { color: #11a8cd; }
 .ansi-white-fg { color: #e5e5e5; }
 .ansi-bright-black-fg { color: #666666; }
@@ -270,4 +270,8 @@
 
 .terminal-link:hover {
   text-decoration: underline;
+}
+
+.terminal-open-button {
+  border-radius: 0.5rem !important;
 }

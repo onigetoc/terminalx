@@ -1,5 +1,6 @@
-// src/components/Terminal/Terminal.tsx
 import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { Button } from "@/components/ui/button";
+import { Terminal as TerminalIcon } from 'lucide-react';
 import '@/components/Terminal/styles/terminal.css';
 import { TerminalUI } from './TerminalUI';
 import { TerminalConfig, defaultConfig } from '@/components/Terminal/config/terminalConfig';
@@ -24,16 +25,113 @@ const Terminal: React.FC<TerminalProps> = ({ config = {} }) => {
   const [history, setHistory] = useState<Array<{ command: string; output: string; isLoading?: boolean }>>([]);
   const [command, setCommand] = useState('');
   const [contentKey, setContentKey] = useState(0);
+  const [isExecuting, setIsExecuting] = useState(false);
 
   const terminalRef = useRef<HTMLDivElement>(null);
   const observerRef = useRef<MutationObserver | null>(null);
   const contentRef = useRef<HTMLElement | null>(null);
+  const commandQueue = useRef<{command: string; displayInTerminal: number}[]>([]);
 
   const scrollToBottom = useCallback(() => {
     if (terminalRef.current) {
       terminalRef.current.scrollTop = terminalRef.current.scrollHeight;
     }
   }, []);
+
+
+  const processCommand = useCallback(async (command: string, displayInTerminal: number) => {
+    if (displayInTerminal) {
+      setHistory(prev => [...prev, { command, output: '', isLoading: true }]);
+    }
+
+    try {
+      const trimmedCommand = command.trim().toLowerCase();
+      let result: CommandResult;
+
+      if (trimmedCommand === 'clear' || trimmedCommand === 'cls') {
+        setHistory([]);
+        setCommand('');
+        setContentKey(prev => prev + 1);
+        return;
+      }
+
+      if (isCustomCommand(command)) {
+        result = await executeCustomCommand(command);
+        // Si la commande personnalisée doit être exécutée sur le serveur
+        if ('executeOnServer' in result && result.executeOnServer && 'command' in result) {
+          const translatedCommand = translateCommand(result.command as string);
+          result = await executeCommandOnServer(translatedCommand);
+        }
+      } else {
+        const translatedCommand = translateCommand(command);
+        result = await executeCommandOnServer(translatedCommand);
+      }
+
+      // Mise à jour du localStorage quand on reçoit un nouveau répertoire du serveur
+      if (result.currentDirectory) {
+        localStorage.setItem('terminalDirectory', result.currentDirectory);
+        setCurrentDirectory(result.currentDirectory);
+      }
+
+      if (displayInTerminal) {
+        setHistory(prev => {
+          const newHistory = [...prev];
+          const lastIndex = newHistory.length - 1;
+          newHistory[lastIndex] = {
+            command,
+            output: result.output,
+            isLoading: false
+          };
+          return newHistory;
+        });
+        setTimeout(scrollToBottom, 0);
+      }
+    } catch (error: unknown) {
+      if (displayInTerminal) {
+        setHistory(prev => {
+          const newHistory = [...prev];
+          const lastIndex = newHistory.length - 1;
+          newHistory[lastIndex] = {
+            command,
+            output: `Error executing command: ${error instanceof Error ? error.message : 'Unknown error occurred'}`,
+            isLoading: false
+          };
+          return newHistory;
+        });
+      }
+    }
+  }, [scrollToBottom, setCommand, setContentKey, setCurrentDirectory, setHistory]);
+
+  const processNextCommand = useCallback(async () => {
+    if (isExecuting || commandQueue.current.length === 0) return;
+
+    setIsExecuting(true);
+    const { command, displayInTerminal } = commandQueue.current[0];
+    
+    try {
+      await processCommand(command, displayInTerminal);
+    } finally {
+      commandQueue.current.shift();
+      setIsExecuting(false);
+      
+      // Process next command if there are any in queue
+      if (commandQueue.current.length > 0) {
+        setTimeout(processNextCommand, 0);
+      }
+    }
+  }, [isExecuting, processCommand]);
+
+  const executeCommand = useCallback(async (cmd: string | string[], displayInTerminal: number = 1) => {
+    const commands = Array.isArray(cmd) ? cmd : [cmd];
+    
+    // Add commands to queue
+    commands.forEach(command => {
+      commandQueue.current.push({ command, displayInTerminal });
+    });
+    
+    // Start processing queue if not already processing
+    processNextCommand();
+  }, [processNextCommand]);
 
   const mergedConfig = { ...defaultConfig, ...config };
 
@@ -49,109 +147,46 @@ const Terminal: React.FC<TerminalProps> = ({ config = {} }) => {
     const os = detectOS();
     setOsInfo(os);
 
-    // Initialize directory from server if no saved directory exists
     async function initDirectory() {
       try {
-        const savedDir = localStorage.getItem('terminalDirectory');
-        if (savedDir) {
-          setCurrentDirectory(savedDir);
-        } else {
-          // Get initial directory from server
+        const storedDirectory = localStorage.getItem('terminalDirectory');
+        
+        // Si pas de localStorage, simplement récupérer le répertoire actuel du serveur
+        if (!storedDirectory) {
           const response = await fetch('http://localhost:3002/current-directory');
           const data = await response.json();
           if (data.currentDirectory) {
             setCurrentDirectory(data.currentDirectory);
-            localStorage.setItem('terminalDirectory', data.currentDirectory);
+          }
+          return;
+        }
+    
+        // Si on a un localStorage, tenter d'initialiser le serveur avec
+        const initResponse = await fetch('http://localhost:3002/initialize-directory', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ directory: storedDirectory })
+        });
+    
+        if (initResponse.ok) {
+          const data = await initResponse.json();
+          setCurrentDirectory(data.currentDirectory);
+        } else {
+          // En cas d'échec, effacer le localStorage et utiliser le répertoire par défaut
+          localStorage.removeItem('terminalDirectory');
+          const response = await fetch('http://localhost:3002/current-directory');
+          const data = await response.json();
+          if (data.currentDirectory) {
+            setCurrentDirectory(data.currentDirectory);
           }
         }
       } catch (error) {
         console.error('Directory initialization error:', error);
-        // Let the user know there was an error
-        setHistory(prev => [...prev, {
-          command: '',
-          output: 'Error initializing terminal directory. Please try refreshing the page.',
-          isLoading: false
-        }]);
       }
     }
     
     initDirectory();
   }, []);
-
-  // Persist directory changes to localStorage
-  useEffect(() => {
-    if (currentDirectory) {
-      localStorage.setItem('terminalDirectory', currentDirectory);
-    }
-  }, [currentDirectory]);
-
-  const executeCommand = useCallback(async (cmd: string | string[], displayInTerminal: number = 1) => {
-    const commands = Array.isArray(cmd) ? cmd : [cmd];
-    
-    for (const command of commands) {
-      if (displayInTerminal) {
-        setHistory(prev => [...prev, { command, output: '', isLoading: true }]);
-      }
-
-      try {
-        const trimmedCommand = command.trim().toLowerCase();
-        let result: CommandResult;
-
-        if (trimmedCommand === 'clear' || trimmedCommand === 'cls') {
-          setHistory([]);
-          setCommand('');
-          setContentKey(prev => prev + 1);
-          return;
-        } 
-
-        if (isCustomCommand(command)) {
-          result = await executeCustomCommand(command);
-        } else {
-          const translatedCommand = translateCommand(command);
-          result = await executeCommandOnServer(translatedCommand);
-        }
-        
-        if (displayInTerminal) {
-          setHistory(prev => {
-            const newHistory = [...prev];
-            const lastIndex = newHistory.length - 1;
-            newHistory[lastIndex] = {
-              command,
-              output: result.output,
-              isLoading: false
-            };
-            return newHistory;
-          });
-          setTimeout(scrollToBottom, 0);
-        }
-
-        // Ne mettre à jour le répertoire que si la commande cd réussit
-        // (c'est-à-dire pas d'erreur dans la sortie et un nouveau répertoire est fourni)
-        if ((command.toLowerCase().startsWith('cd') || command.toLowerCase() === 'cd..' || command.toLowerCase() === 'cd ..') 
-            && result.currentDirectory 
-            && !result.output.includes('no such file or directory')
-            && !result.output.includes('not found')
-            && !result.output.includes('error')) {
-          setCurrentDirectory(result.currentDirectory);
-          localStorage.setItem('terminalDirectory', result.currentDirectory);
-        }
-
-      } catch (error) {
-        if (displayInTerminal) {
-          setHistory(prev => {
-            const newHistory = [...prev];
-            const lastIndex = newHistory.length - 1;
-            newHistory[lastIndex] = {
-              command,
-              output: `Error executing command: ${error}`,
-              isLoading: false
-            };
-            return newHistory;
-          });
-        }
-      }
-    }
-  }, [scrollToBottom]);
 
   useEffect(() => {
     setTerminalExecutor(executeCommand);
@@ -213,6 +248,10 @@ const Terminal: React.FC<TerminalProps> = ({ config = {} }) => {
     setContentKey(prev => prev + 1);
   }, []);
 
+  const handleClose = useCallback(() => {
+    setIsOpen(false);
+  }, []);
+
   const formatCommandWithHighlight = useCallback((command: string): React.ReactNode => {
     return formatCommand(command);
   }, []);
@@ -248,8 +287,8 @@ const Terminal: React.FC<TerminalProps> = ({ config = {} }) => {
       // Le chemin sera mis à jour automatiquement par executeCommand 
       // seulement si la commande réussit
       
-    } catch (error) {
-      if (error.name !== 'AbortError') {
+    } catch (error: unknown) {
+      if (error instanceof Error && error.name !== 'AbortError') {
         setHistory(prev => [...prev, {
           command: '',
           output: `Error selecting directory: ${error.message}`,
@@ -258,6 +297,19 @@ const Terminal: React.FC<TerminalProps> = ({ config = {} }) => {
       }
     }
   }, [executeCommand]);
+
+  if (!isOpen) {
+    return (
+      <Button
+        variant="default"
+        className="fixed bottom-4 right-4 bg-[#1e1e1e] text-white floating-button rounded-[8px]" // Utilisation d'une valeur directe
+        onClick={() => setIsOpen(true)}
+      >
+        <TerminalIcon className="w-4 h-4 mr-2 lucide" />
+        Open Terminal
+      </Button>
+    );
+  }
 
   return (
     <TerminalUI
@@ -273,7 +325,7 @@ const Terminal: React.FC<TerminalProps> = ({ config = {} }) => {
       terminalRef={terminalRef}
       handleMouseDown={handleMouseDown}
       handleKillTerminal={handleKillTerminal}
-      setIsOpen={setIsOpen}
+      setIsOpen={handleClose}
       setIsMinimized={setIsMinimized}
       setIsFullscreen={setIsFullscreen}
       handleSubmit={handleSubmit}
