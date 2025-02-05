@@ -141,7 +141,6 @@ terminal/
 │   │   │   │   └── index.ts
 │   │   │   ├── services/
 │   │   │   │   ├── customCommands.ts
-│   │   │   │   ├── encodingUtils.txt
 │   │   │   │   ├── terminalApi.ts
 │   │   │   │   ├── terminalFormatter.tsx
 │   │   │   │   └── terminalFormatter.txt

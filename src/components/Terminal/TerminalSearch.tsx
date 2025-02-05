@@ -238,6 +238,12 @@ const TerminalSearch = forwardRef<TerminalSearchRef, TerminalSearchProps>(({ isV
         value={searchText}
         onChange={(e) => setSearchText(e.target.value)}
         onKeyDown={handleSearchKeyDown}
+        onKeyDownCapture={(e) => {
+          if (e.ctrlKey && e.key.toLowerCase() === 'f') {
+            e.preventDefault();
+            e.stopPropagation();
+          }
+        }}
         className="w-40 bg-transparent border-none rounded-xl text-[#d4d4d4] text-sm px-2 outline-none focus:outline-none placeholder-[#666] transition-opacity duration-200 opacity-100"
         placeholder="Find in terminal..."
       />

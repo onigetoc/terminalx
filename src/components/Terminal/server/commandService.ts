@@ -2,24 +2,32 @@ import { spawn } from 'child_process';
 import path from 'path';
 import os from 'os';
 
-// Réinitialiser le répertoire de travail au démarrage du serveur
+// Initialize the working directory
 let currentWorkingDirectory = os.homedir();
-process.chdir(currentWorkingDirectory);
 
-// Ajout d'une fonction pour initialiser le répertoire
-export const initializeDirectory = (directory: string) => {
+// Use this directory as default, but don't change process directory yet
+// This allows time for the stored directory to be loaded from localStorage
+export const initializeDirectory = async (directory?: string) => {
   try {
-    process.chdir(directory);
-    currentWorkingDirectory = process.cwd();
+    // If a directory is provided (e.g. from localStorage), try to use it
+    if (directory) {
+      process.chdir(directory);
+      currentWorkingDirectory = process.cwd();
+      return true;
+    }
+    
+    // Otherwise use the home directory
+    process.chdir(currentWorkingDirectory);
     return true;
   } catch (error) {
-    // En cas d'erreur, revenir au répertoire personnel
-    currentWorkingDirectory = os.homedir();
-    process.chdir(currentWorkingDirectory);
     console.error('Failed to initialize directory:', error);
+    // On error, stay in current directory rather than forcing home
     return false;
   }
 };
+
+// Initialize with home directory
+initializeDirectory();
 
 export const executeCommand = async (command: string) => {
   const cmd = command.trim();
@@ -54,40 +62,36 @@ export const executeCommand = async (command: string) => {
   return new Promise((resolve, reject) => {
     try {
       const isWindows = process.platform === 'win32';
-      const shell = isWindows ? 'cmd.exe' : true;
-      const shellArgs = isWindows ? ['/d', '/s', '/c'] : [];
+      const shell = isWindows ? 'cmd.exe' : '/bin/sh';
+      const shellArgs = isWindows ? ['/d', '/s', '/c'] : ['-c'];
       
-      // Passer la commande telle quelle, sans modification
-      const childProcess = spawn(
-        isWindows ? shell : cmd.split(' ')[0],
-        isWindows ? [...shellArgs, cmd] : cmd.split(' ').slice(1),
-        {
-          cwd: currentWorkingDirectory,
-          shell: !isWindows,
-          windowsHide: false,
-          env: { ...process.env, FORCE_COLOR: 'true', TERM: 'xterm-256color' }
-        }
-      );
+      // Execute command through shell
+      const childProcess = spawn(shell, [...shellArgs, cmd], {
+        cwd: currentWorkingDirectory,
+        shell: false,
+        windowsHide: false,
+        env: { ...process.env, FORCE_COLOR: 'true', TERM: 'xterm-256color' }
+      });
 
       let stdout = '';
       let stderr = '';
 
-      childProcess.stdout?.on('data', (data) => {
+      childProcess.stdout.on('data', (data: Buffer) => {
         stdout += data.toString();
       });
 
-      childProcess.stderr?.on('data', (data) => {
+      childProcess.stderr.on('data', (data: Buffer) => {
         stderr += data.toString();
       });
 
-      childProcess.on('close', () => {
+      childProcess.on('close', (code: number) => {
         resolve({
           output: stdout || stderr,
           currentDirectory: currentWorkingDirectory
         });
       });
 
-      childProcess.on('error', (error) => {
+      childProcess.on('error', (error: Error) => {
         reject(error);
       });
     } catch (error) {

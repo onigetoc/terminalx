@@ -1,6 +1,6 @@
 import express, { Request, Response } from 'express';
 import cors from 'cors';
-import { executeCommand, getCurrentDirectory } from './commandService';
+import { executeCommand, getCurrentDirectory, initializeDirectory } from './commandService';
 
 const app = express();
 const port = 3002;
@@ -26,6 +26,24 @@ app.post('/execute', async (req: Request, res: Response) => {
   } catch (error: any) {
     res.status(500).json({ 
       error: 'Error executing command',
+      details: error.message
+    });
+  }
+});
+
+// Initialize directory endpoint
+app.post('/init-directory', async (req: Request, res: Response) => {
+  try {
+    const { directory } = req.body;
+    const success = await initializeDirectory(directory);
+    if (success) {
+      res.json({ currentDirectory: getCurrentDirectory() });
+    } else {
+      res.status(500).json({ error: 'Failed to initialize directory' });
+    }
+  } catch (error: any) {
+    res.status(500).json({ 
+      error: 'Error initializing directory',
       details: error.message
     });
   }

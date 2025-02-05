@@ -2,7 +2,7 @@ import Terminal from "@/components/Terminal/Terminal";
 import { terminalConfig } from '@/components/Terminal/config/terminalConfig';
 import { Button } from "@/components/ui/button";
 import { Play, Terminal as TerminalIcon, Globe } from "lucide-react";
-// import { executeCommand } from "@/components/Terminal/utils/terminalUtils"; // Assurez-vous que cette fonction est importée
+import { executeCommand } from "@/components/Terminal/utils/terminalUtils"; // Assurez-vous que cette fonction est importée
 
 const Index = () => {
   return (

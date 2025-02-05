@@ -18,6 +18,9 @@ function decodeText(text: string): string {
 const URL_REGEX = /https?:\/\/[^\s"')]+/g;
 const PATH_REGEX = /(?:["]?[A-Za-z]:\\(?:[^\\/:*?<>|\r\n]+\\)*[^\\/:*?<>|\r\n]+["]?|\(["]?[A-Za-z]:\\(?:[^\\/:*?<>|\r\n]+\\)*[^\\/:*?<>|\r\n]+["]?\))/g;
 
+// Regex pour détecter les drapeaux de commande (options)
+const FLAG_PATTERN = /(?<=\s)(-{1,2}\w+)/g;
+
 interface FormatOptions {
   convertPaths?: boolean;
 }
@@ -31,28 +34,24 @@ interface LinkProps {
 /**
  * Format command with syntax highlighting 
  */
-export function formatCommand(command: string): JSX.Element {
-  // Clean multiple spaces while preserving a single space between words
-  const cleanedCommand = command.trim().replace(/\s+/g, ' ');
-  const firstSpaceIndex = cleanedCommand.indexOf(' ');
+export function formatCommand(command: string): React.ReactNode {
+  // Split le texte pour préserver les espaces
+  const parts = command.split(FLAG_PATTERN);
   
-  if (firstSpaceIndex === -1) {
-    return (
-      <>
-        <span className="text-yellow-300">{cleanedCommand}</span>
-        <span className="terminal-command"></span>
-      </>
-    );
-  }
-
-  const firstWord = cleanedCommand.slice(0, firstSpaceIndex);
-  const rest = cleanedCommand.slice(firstSpaceIndex);
+  // Utilise exec pour trouver tous les drapeaux
+  const flags = Array.from(command.matchAll(FLAG_PATTERN));
+  let flagIndex = 0;
 
   return (
-    <>
-      <span className="text-yellow-300">{firstWord}</span>
-      <span className="terminal-command">{rest}</span>
-    </>
+    <span className="terminal-command">
+      {parts.map((part, index) => {
+        if (index % 2 === 1) {
+          // C'est un drapeau trouvé
+          return <span key={index} className="text-gray-400">{flags[flagIndex++][0]}</span>;
+        }
+        return part;
+      })}
+    </span>
   );
 }
 

@@ -51,6 +51,11 @@
   white-space: pre;
 }
 
+.terminal-command .text-gray-400 {
+  color: #808080; /* Un gris pâle */
+  opacity: 0.8;
+}
+
 .terminal-output-line {
   position: relative;
   padding: 4px 8px;

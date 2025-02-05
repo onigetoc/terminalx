@@ -9,6 +9,7 @@ import { translateCommand } from '@/components/Terminal/utils/commandOS';
 import { isCustomCommand, executeCustomCommand } from './services/customCommands';
 import { executeCommandOnServer, CommandResult } from './services/terminalApi';
 import { formatCommand, formatTextWithLinks, FormattedOutput } from './services/terminalFormatter';
+import { initializeDirectory, updateStoredDirectory } from './utils/directoryUtils';
 
 interface TerminalProps {
   config?: Partial<TerminalConfig>;
@@ -67,9 +68,13 @@ const Terminal: React.FC<TerminalProps> = ({ config = {} }) => {
         result = await executeCommandOnServer(translatedCommand);
       }
 
-      // Mise à jour du localStorage quand on reçoit un nouveau répertoire du serveur
+      // Update directory state and storage when cd command succeeds
       if (result.currentDirectory) {
-        localStorage.setItem('terminalDirectory', result.currentDirectory);
+        // Update storage for all cd commands
+        const trimmedCmd = command.trim().toLowerCase();
+        if (trimmedCmd === 'cd' || trimmedCmd === 'cd..' || trimmedCmd.startsWith('cd ')) {
+          updateStoredDirectory(result.currentDirectory);
+        }
         setCurrentDirectory(result.currentDirectory);
       }
 
@@ -147,45 +152,17 @@ const Terminal: React.FC<TerminalProps> = ({ config = {} }) => {
     const os = detectOS();
     setOsInfo(os);
 
-    async function initDirectory() {
+    // Initialiser le répertoire en utilisant directoryUtils
+    const initDir = async () => {
       try {
-        const storedDirectory = localStorage.getItem('terminalDirectory');
-        
-        // Si pas de localStorage, simplement récupérer le répertoire actuel du serveur
-        if (!storedDirectory) {
-          const response = await fetch('http://localhost:3002/current-directory');
-          const data = await response.json();
-          if (data.currentDirectory) {
-            setCurrentDirectory(data.currentDirectory);
-          }
-          return;
-        }
-    
-        // Si on a un localStorage, tenter d'initialiser le serveur avec
-        const initResponse = await fetch('http://localhost:3002/initialize-directory', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ directory: storedDirectory })
-        });
-    
-        if (initResponse.ok) {
-          const data = await initResponse.json();
-          setCurrentDirectory(data.currentDirectory);
-        } else {
-          // En cas d'échec, effacer le localStorage et utiliser le répertoire par défaut
-          localStorage.removeItem('terminalDirectory');
-          const response = await fetch('http://localhost:3002/current-directory');
-          const data = await response.json();
-          if (data.currentDirectory) {
-            setCurrentDirectory(data.currentDirectory);
-          }
-        }
+        const dir = await initializeDirectory();
+        setCurrentDirectory(dir);
       } catch (error) {
-        console.error('Directory initialization error:', error);
+        console.error('Failed to initialize directory:', error);
       }
-    }
-    
-    initDirectory();
+    };
+
+    initDir();
   }, []);
 
   useEffect(() => {
