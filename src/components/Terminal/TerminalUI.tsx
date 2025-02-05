@@ -353,7 +353,7 @@ export function TerminalUI(props: TerminalUIProps): JSX.Element {
                           variant="ghost"
                           size="icon"
                           className="h-8 w-8 bg-[#1e1e1e] hover:bg-[#333] text-[#d4d4d4] hover:text-[#fff] transition-colors"
-                          onClick={() => props.executeCommand('clear')}
+                          onClick={handleClearHistory}
                         >
                           <Eraser className="h-4 w-4 lucide" />
                         </Button>
@@ -369,24 +369,7 @@ export function TerminalUI(props: TerminalUIProps): JSX.Element {
                           type="button"
                           variant="ghost"
                           size="icon"
-                          className="h-8 w-8 bg-[#1e1e1e] hover:bg-[#333] text-[#d4d4d4] hover:text-[#fff] transition-colors"
-                          onClick={handleClearHistory} // Maintenant handleClearHistory est défini
-                        >
-                          <History className="h-4 w-4 lucide" />
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent side="top" className={tooltipStyle}>
-                        <p>Clear History</p>
-                      </TooltipContent>
-                    </Tooltip>
-
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 bg-[#1e1e1e] hover:bg-[#333] text-[#d4d4d4] hover:text-[#fff] transition-colors"
+                          className="h-8 w-8 bg-zinc-800 hover:bg-[#333] text-[#d4d4d4] hover:text-[#fff] transition-colors"
                           onClick={() => props.executeCommand('help')}
                         >
                           <HelpCircle className="h-4 w-4 lucide" />
@@ -403,7 +386,7 @@ export function TerminalUI(props: TerminalUIProps): JSX.Element {
                           type="button"
                           variant="ghost"
                           size="icon"
-                          className="h-8 w-8 bg-[#1e1e1e] hover:bg-[#333] text-[#d4d4d4] hover:text-[#fff] transition-colors"
+                          className="h-8 w-8 bg-zinc-800 hover:bg-[#333] text-[#d4d4d4] hover:text-[#fff] transition-colors"
                           onClick={() => props.executeCommand('about')}
                         >
                           <Info className="h-4 w-4 lucide" />

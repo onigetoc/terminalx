@@ -16,10 +16,11 @@ interface TerminalProps {
 }
 
 const Terminal: React.FC<TerminalProps> = ({ config = {} }) => {
-  const [isOpen, setIsOpen] = useState(true);
-  const [isFullscreen, setIsFullscreen] = useState(false);
-  const [isMinimized, setIsMinimized] = useState(false);
-  const [height, setHeight] = useState(320);
+  const mergedConfig = { ...defaultConfig, ...config };
+  const [isOpen, setIsOpen] = useState(mergedConfig.initialState === 'open');
+  const [isFullscreen, setIsFullscreen] = useState(mergedConfig.startFullscreen);
+  const [isMinimized, setIsMinimized] = useState(mergedConfig.startMinimized);
+  const [height, setHeight] = useState(mergedConfig.defaultHeight);
   const [isDragging, setIsDragging] = useState(false);
   const [currentDirectory, setCurrentDirectory] = useState('');
   const [osInfo, setOsInfo] = useState('');
@@ -137,8 +138,6 @@ const Terminal: React.FC<TerminalProps> = ({ config = {} }) => {
     // Start processing queue if not already processing
     processNextCommand();
   }, [processNextCommand]);
-
-  const mergedConfig = { ...defaultConfig, ...config };
 
   useEffect(() => {
     const detectOS = () => {

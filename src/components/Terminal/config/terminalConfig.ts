@@ -27,7 +27,7 @@ export const defaultConfig: TerminalConfig = {
   showFloatingButton: true,
   showTerminal: true,
   startMinimized: false,
-  defaultHeight: 320,
+  defaultHeight: 340,
   minHeight: 200,
   minWidth: 300,
   showExecutedCommands: true,

@@ -132,7 +132,7 @@ const Index = () => {
         config={{
           readOnlyMode: false,
           initialState: 'open',
-          defaultHeight: 320,
+          defaultHeight: 340,
         }} 
       />
     </div>
