@@ -146,6 +146,16 @@ export const commandMap: CommandMapping = {
     'windows': 'echo.>',
     'macos': 'touch',
     'linux': 'touch'
+  },
+  'where': {
+    'windows': 'where',
+    'macos': 'which',
+    'linux': 'which'
+  },
+  'which': {
+    'windows': 'where',
+    'macos': 'which',
+    'linux': 'which'
   }
 };
 

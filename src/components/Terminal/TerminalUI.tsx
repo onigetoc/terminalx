@@ -260,7 +260,7 @@ export function TerminalUI(props: TerminalUIProps): JSX.Element {
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="bg-transparent border-none hover:bg-red-900/70 text-[#d4d4d4] hover:text-[#fff] h-6 w-6 transition-colors"
+                      className="bg-transparent border-none hover:bg-[#333] text-[#d4d4d4] hover:text-[#fff] h-6 w-6 transition-colors"
                       onClick={handleClose} // Utiliser handleClose ici
                     >
                       <X className="h-4 w-4 lucide" />

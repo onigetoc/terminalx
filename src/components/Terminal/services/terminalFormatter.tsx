@@ -35,15 +35,20 @@ interface LinkProps {
  * Format command with syntax highlighting 
  */
 export function formatCommand(command: string): React.ReactNode {
-  // Split le texte pour préserver les espaces
-  const parts = command.split(FLAG_PATTERN);
-  
-  // Utilise exec pour trouver tous les drapeaux
-  const flags = Array.from(command.matchAll(FLAG_PATTERN));
+  // Sépare le premier mot (la commande) du reste
+  const [firstWord, ...rest] = command.split(/\s+/);
+  const remainingText = rest.join(' ');
+
+  // Split le reste du texte pour les drapeaux
+  const parts = remainingText.split(FLAG_PATTERN);
+  const flags = Array.from(remainingText.matchAll(FLAG_PATTERN));
   let flagIndex = 0;
 
   return (
     <span className="terminal-command">
+      <span className="text-yellow-300">{firstWord}</span>
+      {/* Ajouter un espace après la commande s'il y a un texte restant */}
+      {remainingText && <span>&nbsp;</span>}
       {parts.map((part, index) => {
         if (index % 2 === 1) {
           // C'est un drapeau trouvé
