@@ -1,3 +1,5 @@
+import { getServerUrl } from '../config/serverConfig';
+
 /**
  * Normalise un chemin en remplaçant les backslashes par des forward slashes.
  */
@@ -8,15 +10,15 @@ export function formatPath(path: string): string {
 /**
  * Gets the current directory from the server
  */
-async function getCurrentDirectory(): Promise<string> {
+export async function getCurrentDirectory(): Promise<string> {
   try {
-    const response = await fetch('http://localhost:3002/current-directory');
+    const API_URL = await getServerUrl();
+    const response = await fetch(`${API_URL}/current-directory`);
     if (!response.ok) throw new Error('Failed to get current directory');
     const data = await response.json();
     return formatPath(data.currentDirectory);
   } catch (error) {
-    console.error('Error getting current directory:', error);
-    // Use default Windows path since we know the environment
+    console.warn('Failed to get current directory, using fallback:', error);
     return formatPath('C:/Users/LENOVO');
   }
 }
@@ -33,8 +35,8 @@ export async function initializeDirectory(): Promise<string> {
     
     if (storedDirectory) {
       try {
-        // Try to initialize the server with stored directory
-        const response = await fetch('http://localhost:3002/init-directory', {
+        const API_URL = await getServerUrl();
+        const response = await fetch(`${API_URL}/init-directory`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ directory: storedDirectory })

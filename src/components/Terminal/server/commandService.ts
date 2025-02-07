@@ -1,6 +1,7 @@
 import { spawn } from 'child_process';
 import path from 'path';
 import os from 'os';
+import { decodeOutput, isWindows } from '../utils/encodingUtils';
 
 // Initialize the working directory
 let currentWorkingDirectory = os.homedir();
@@ -61,32 +62,49 @@ export const executeCommand = async (command: string) => {
 
   return new Promise((resolve, reject) => {
     try {
-      const isWindows = process.platform === 'win32';
       const shell = isWindows ? 'cmd.exe' : '/bin/sh';
       const shellArgs = isWindows ? ['/d', '/s', '/c'] : ['-c'];
       
-      // Execute command through shell
+      // Préparer l'environnement en fonction de la commande
+      const env = {
+        ...process.env,
+        FORCE_COLOR: 'true',
+        TERM: 'xterm-256color'
+      };
+
+      // Si ce n'est PAS la commande tree, forcer l'UTF-8
+      if (!cmd.startsWith('tree')) {
+        Object.assign(env, {
+          PYTHONIOENCODING: 'utf-8',
+          LANG: 'en_US.UTF-8',
+          CHCP: '65001' // Force l'UTF-8 sur Windows
+        });
+      }
+
       const childProcess = spawn(shell, [...shellArgs, cmd], {
         cwd: currentWorkingDirectory,
         shell: false,
         windowsHide: false,
-        env: { ...process.env, FORCE_COLOR: 'true', TERM: 'xterm-256color' }
+        env
       });
 
-      let stdout = '';
-      let stderr = '';
+      const stdoutBuffers: Buffer[] = [];
+      const stderrBuffers: Buffer[] = [];
 
       childProcess.stdout.on('data', (data: Buffer) => {
-        stdout += data.toString();
+        stdoutBuffers.push(data);
       });
 
       childProcess.stderr.on('data', (data: Buffer) => {
-        stderr += data.toString();
+        stderrBuffers.push(data);
       });
 
       childProcess.on('close', (code: number) => {
+        const stdout = Buffer.concat(stdoutBuffers);
+        const stderr = Buffer.concat(stderrBuffers);
+        
         resolve({
-          output: stdout || stderr,
+          output: decodeOutput(cmd, stdout) || decodeOutput(cmd, stderr),
           currentDirectory: currentWorkingDirectory
         });
       });
