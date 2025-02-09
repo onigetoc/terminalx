@@ -1,12 +1,15 @@
-import express, { Request, Response } from 'express';
-import cors from 'cors';
+import fastify, { FastifyRequest } from 'fastify';
+import cors from '@fastify/cors';
 import { executeCommand, getCurrentDirectory, initializeDirectory } from './commandService';
 import { SERVER_CONFIG } from '../config/serverConfig';
 import net from 'net';
 import fs from 'fs';
 import path from 'path';
 
-const app = express();
+const app = fastify({ logger: true });
+
+// Register CORS plugin
+app.register(cors);
 
 // Fonction pour vérifier si un port est disponible
 async function findAvailablePort(startPort: number, endPort: number): Promise<number> {
@@ -51,81 +54,68 @@ async function startServer() {
     // Sauvegarder le port pour que le client puisse le récupérer
     await savePortToFile(port);
 
-    // Configure middleware et routes
-    app.use(cors());
-    app.use(express.json());
-    
     // Route de base pour vérifier que le serveur répond
-    app.get('/', (req: Request, res: Response) => {
-      res.json({ status: 'Terminal server running' });
+    app.get('/', async () => {
+      return { status: 'Terminal server running' };
     });
 
-    // Set response headers for all routes
-    app.use((req: Request, res: Response, next) => {
-      res.header('Content-Type', 'application/json; charset=utf-8');
-      next();
+    // Health check route
+    app.get('/health', async () => {
+      return { status: 'ok' };
     });
 
-    // Ajouter avant les autres routes
-    app.get('/health', (req: Request, res: Response) => {
-      res.json({ status: 'ok' });
-    });
-
-    app.post('/execute', async (req: Request, res: Response) => {
-      try {
-        const { command } = req.body;
-        if (!command || typeof command !== 'string') {
-          return res.status(400).json({ error: 'Invalid command' });
-        }
-        const result = await executeCommand(command);
-        res.json(result);
-      } catch (error: any) {
-        res.status(500).json({ 
-          error: 'Error executing command',
-          details: error.message
-        });
+    // Execute command route
+    app.post('/execute', async (request: FastifyRequest<{
+      Body: { command: string }
+    }>) => {
+      const { command } = request.body;
+      if (!command || typeof command !== 'string') {
+        throw new Error('Invalid command');
       }
+      return executeCommand(command);
     });
 
     // Initialize directory endpoint
-    app.post('/init-directory', async (req: Request, res: Response) => {
-      try {
-        const { directory } = req.body;
-        const success = await initializeDirectory(directory);
-        if (success) {
-          res.json({ currentDirectory: getCurrentDirectory() });
-        } else {
-          res.status(500).json({ error: 'Failed to initialize directory' });
-        }
-      } catch (error: any) {
-        res.status(500).json({ 
-          error: 'Error initializing directory',
-          details: error.message
-        });
+    app.post('/init-directory', async (request: FastifyRequest<{
+      Body: { directory: string }
+    }>) => {
+      const { directory } = request.body;
+      const success = await initializeDirectory(directory);
+      if (!success) {
+        throw new Error('Failed to initialize directory');
       }
+      return { currentDirectory: getCurrentDirectory() };
     });
 
-    app.get('/current-directory', (req: Request, res: Response) => {
-      try {
-        const currentDir = getCurrentDirectory();
-        res.json({ currentDirectory: currentDir });
-      } catch {
-        res.status(500).json({ error: 'Error getting current directory' });
-      }
+    app.get('/current-directory', async () => {
+      return { currentDirectory: getCurrentDirectory() };
+    });
+
+    // Ajoute une gestion d'erreur globale
+    app.setErrorHandler((error, request, reply) => {
+      app.log.error(error);
+      reply.status(500).send({
+        error: error.message || 'Internal Server Error',
+        statusCode: 500
+      });
     });
 
     // Démarre le serveur sur le port trouvé
-    const server = app.listen(port, () => {
+    try {
+      await app.listen({ port, host: 'localhost' });
       console.log(`Terminal server running on port ${port}`);
       // Sauvegarder le port immédiatement après le démarrage réussi
-      savePortToFile(port).catch(console.error);
-    });
+      await savePortToFile(port);
+    } catch (err) {
+      app.log.error('Error starting server:', err);
+      process.exit(1);
+    }
 
     // Gestion propre de l'arrêt du serveur
-    process.on('SIGTERM', () => {
-      server.close(() => {
-        console.log('Server terminated');
-      });
+    process.on('SIGTERM', async () => {
+      await app.close();
+      console.log('Server terminated');
+      process.exit(0);
     });
 
   } catch (error) {

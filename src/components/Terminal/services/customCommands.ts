@@ -33,13 +33,13 @@ const CUSTOM_COMMANDS: Record<string, (args?: string) => CommandResult> = {
   executeCommand('help')}
   executeCommand(['help', 'npm ls', 'about'])}
   
-  Documentation: https://github.com/onigetoc/fake-terminal-experience`
+  Documentation: https://github.com/onigetoc/terminalx`
   }),
 
   about: () => ({
     output: `Terminal Emulator v1.0
 Built with React + Vite
-Github Repository: https://github.com/onigetoc/fake-terminal-experience`
+Github Repository: https://github.com/onigetoc/terminalx`
   }),
 
   getuserlang: () => {

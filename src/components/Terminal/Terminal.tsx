@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Terminal as TerminalIcon } from 'lucide-react';
 import '@/components/Terminal/styles/terminal.css';
 import { TerminalUI } from './TerminalUI';
-import { TerminalConfig, defaultConfig } from '@/components/Terminal/config/terminalConfig';
+import { TerminalConfig, defaultConfig, terminalConfig } from '@/components/Terminal/config/terminalConfig'; // Ajout de terminalConfig ici
 import { setTerminalExecutor } from '@/components/Terminal/utils/terminalUtils';
 import { translateCommand } from '@/components/Terminal/utils/commandOS';
 import { isCustomCommand, executeCustomCommand } from './services/customCommands';
@@ -18,6 +18,7 @@ interface TerminalProps {
 const Terminal: React.FC<TerminalProps> = ({ config = {} }) => {
   const mergedConfig = { ...defaultConfig, ...config };
   const [isOpen, setIsOpen] = useState(mergedConfig.initialState === 'open');
+  const [isVisible, setIsVisible] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(mergedConfig.startFullscreen);
   const [isMinimized, setIsMinimized] = useState(mergedConfig.startMinimized);
   const [height, setHeight] = useState(mergedConfig.defaultHeight);
@@ -169,6 +170,24 @@ const Terminal: React.FC<TerminalProps> = ({ config = {} }) => {
     return () => setTerminalExecutor(null);
   }, [executeCommand]);
 
+  // Modifier l'effet pour initialiser l'état isVisible avec la valeur de terminalConfig
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      const config = terminalConfig.get();
+      setIsVisible(config.showTerminal);
+    };
+
+    // Initialiser l'état avec la valeur actuelle
+    setIsVisible(terminalConfig.get().showTerminal);
+
+    // S'abonner aux changements de configuration
+    window.addEventListener('terminal-visibility-change', handleVisibilityChange);
+    
+    return () => {
+      window.removeEventListener('terminal-visibility-change', handleVisibilityChange);
+    };
+  }, []);
+
   // Scroll to bottom when history changes
   useEffect(() => {
     scrollToBottom();
@@ -274,12 +293,19 @@ const Terminal: React.FC<TerminalProps> = ({ config = {} }) => {
     }
   }, [executeCommand]);
 
+  // Modifier la condition de rendu pour cacher complètement le composant
+  if (!isVisible) {
+    return null; // Ne rien rendre du tout quand isVisible est false
+  }
+
   if (!isOpen) {
     return (
       <Button
         variant="default"
         className="fixed bottom-4 right-4 bg-[#1e1e1e] text-white floating-button rounded-[8px]" // Utilisation d'une valeur directe
-        onClick={() => setIsOpen(true)}
+        onClick={() => {
+          setIsOpen(true);
+        }}
       >
         <TerminalIcon className="w-4 h-4 mr-2 lucide" />
         Open Terminal

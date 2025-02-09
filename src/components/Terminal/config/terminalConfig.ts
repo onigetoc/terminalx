@@ -65,6 +65,10 @@ export const terminalConfig = {
   toggleVisibility: (show?: boolean) => {
     terminalConfig.private.current.showTerminal = 
       show ?? !terminalConfig.private.current.showTerminal;
+    
+    // Émettre un événement quand la visibilité change
+    window.dispatchEvent(new CustomEvent('terminal-visibility-change'));
+    
     return terminalConfig.private.current;
   }
 };

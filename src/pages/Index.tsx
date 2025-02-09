@@ -2,9 +2,16 @@ import Terminal from "@/components/Terminal/Terminal";
 import { terminalConfig } from '@/components/Terminal/config/terminalConfig';
 import { Button } from "@/components/ui/button";
 import { Play, Terminal as TerminalIcon, Globe } from "lucide-react";
-import { executeCommand } from "@/components/Terminal/utils/terminalUtils"; // Assurez-vous que cette fonction est importée
+import { useState } from 'react';
 
 const Index = () => {
+  const [showTerminal, setShowTerminal] = useState(true);
+
+  const handleToggleTerminal = () => {
+    setShowTerminal(!showTerminal);
+    terminalConfig.toggleVisibility();
+  };
+
   return (
     <div className="min-h-screen bg-background">
       <div className="container mx-auto p-4">
@@ -120,21 +127,23 @@ const Index = () => {
           {/* Ajout du bouton de test */}
           <Button
             variant="outline"
-            onClick={() => terminalConfig.toggleVisibility()}
+            onClick={handleToggleTerminal}
             className="flex items-center gap-2 border-gray-500"  // Voici la bonne classe Tailwind
           >
             <TerminalIcon className="h-4 w-4" />
-            Toggle Terminal
+            {showTerminal ? 'Hide Terminal' : 'Show Terminal'}
           </Button>
         </div>
       </div>
-      <Terminal 
-        config={{
-          readOnlyMode: false,
-          initialState: 'open',
-          defaultHeight: 340,
-        }} 
-      />
+      {showTerminal && (
+        <Terminal 
+          config={{
+            readOnlyMode: false,
+            initialState: 'open',
+            defaultHeight: 340,
+          }} 
+        />
+      )}
     </div>
   );
 };

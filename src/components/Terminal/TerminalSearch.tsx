@@ -254,7 +254,7 @@ const TerminalSearch = forwardRef<TerminalSearchRef, TerminalSearchProps>(({ isV
         <Button
           variant="ghost"
           size="icon"
-          className="hover:bg-[#2a2d2e] rounded disabled:opacity-50"
+          className="h-7 w-7 p-1.5 disabled:opacity-50 text-gray-300 hover:text-gray-200 hover:bg-[#3e3e3e] rounded transition-colors"
           onClick={handlePrevious}
           disabled={totalMatches === 0}
         >
@@ -263,7 +263,7 @@ const TerminalSearch = forwardRef<TerminalSearchRef, TerminalSearchProps>(({ isV
         <Button
           variant="ghost"
           size="icon"
-          className="hover:bg-[#2a2d2e] rounded disabled:opacity-50"
+          className="h-7 w-7 p-1.5 disabled:opacity-50 text-gray-300 hover:text-gray-200 hover:bg-[#3e3e3e] rounded transition-colors"
           onClick={handleNext}
           disabled={totalMatches === 0}
         >
@@ -272,7 +272,7 @@ const TerminalSearch = forwardRef<TerminalSearchRef, TerminalSearchProps>(({ isV
         <Button
           variant="ghost"
           size="icon"
-          className="hover:bg-[#2a2d2e] rounded disabled:opacity-50"
+          className="h-7 w-7 p-1.5 text-gray-300 hover:text-gray-200 hover:bg-[#3e3e3e] rounded transition-colors"
           onClick={onClose}
         >
           <X className="w-4 h-4 lucide" />
