@@ -337,33 +337,7 @@ const Terminal: React.FC<TerminalProps> = ({ config = {} }) => {
 
   // Modifier la condition de rendu pour utiliser CSS au lieu de null
   return (
-    <>
-      {showTimeoutDialog && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-[#1e1e1e] text-white p-6 rounded-lg shadow-lg">
-            <h2 className="text-xl font-semibold mb-4">Command Timeout</h2>
-            <p className="mb-6">The command has been running for 30 seconds. Would you like to continue waiting or cancel it?</p>
-            <div className="flex justify-end gap-4">
-              <button
-                className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
-                onClick={() => {
-                  currentTimeoutCommand?.cancel();
-                  setShowTimeoutDialog(false);
-                }}
-              >
-                Cancel Command
-              </button>
-              <button
-                className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-                onClick={() => setShowTimeoutDialog(false)}
-              >
-                Continue Waiting
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-      <div className={`${!isVisible ? 'hidden' : ''}`}>
+    <div className={`${!isVisible ? 'hidden' : ''}`}>
         {!isOpen ? (
           <Button
             variant="default"
@@ -414,7 +388,6 @@ const Terminal: React.FC<TerminalProps> = ({ config = {} }) => {
           />
         )}
       </div>
-    </>
   );
 };
 
