@@ -174,3 +174,12 @@ terminal/
 ├── tsconfig.server.json
 └── vite.config.ts
 ```
+
+# Best Practices for Terminal Output Rendering
+
+- Use the FormattedOutput component to render all terminal output.  
+- Do not call formatTextWithLinks directly as it may lead to duplicate link creation.
+- This ensures that:
+  - All URLs and file paths are correctly highlighted
+  - Only one instance of link formatting is applied per output  
+- Future contributions should adhere to this rule to maintain a consistent user experience.

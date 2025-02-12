@@ -26,6 +26,26 @@ const TerminalSearch = forwardRef<TerminalSearchRef, TerminalSearchProps>(({ isV
   const [totalMatches, setTotalMatches] = useState(0);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const matchesRef = useRef<SearchMatch[]>([]);
+  const isSearchActive = useRef(false);
+
+  // Reset uniquement les highlights quand la fenêtre de recherche est fermée
+  useEffect(() => {
+    if (!isVisible) {
+      clearHighlights();
+      isSearchActive.current = false;
+    } else {
+      isSearchActive.current = true;
+      // Réappliquer la recherche si du texte existe déjà
+      if (searchText) {
+        highlightMatches();
+      }
+    }
+    
+    return () => {
+      clearHighlights();
+      isSearchActive.current = false;
+    };
+  }, [isVisible]);
 
   useImperativeHandle(ref, () => ({
     focus: () => {
@@ -34,7 +54,11 @@ const TerminalSearch = forwardRef<TerminalSearchRef, TerminalSearchProps>(({ isV
         searchInputRef.current.select();
       }
     },
-    removeAllHighlights: clearHighlights
+    removeAllHighlights: () => {
+      clearHighlights();
+      isSearchActive.current = false;
+      // Ne pas réinitialiser searchText ici non plus
+    }
   }));
 
   const clearHighlights = () => {
@@ -52,7 +76,21 @@ const TerminalSearch = forwardRef<TerminalSearchRef, TerminalSearchProps>(({ isV
     }
   };
 
+  // Cette fonction sera appelée après chaque commande du terminal
+  useEffect(() => {
+    if (!isVisible || !isSearchActive.current) {
+      clearHighlights();
+      return;
+    }
+
+    // Réappliquer la recherche si elle était active
+    if (searchText && isSearchActive.current) {
+      highlightMatches();
+    }
+  }, [history]);
+
   const findMatches = () => {
+    if (!isSearchActive.current) return [];
     const content = terminalRef.current;
     if (!content || !searchText) return [];
 
@@ -89,6 +127,7 @@ const TerminalSearch = forwardRef<TerminalSearchRef, TerminalSearchProps>(({ isV
   };
 
   const scrollToCurrentMatch = (index: number = currentMatch) => {
+    if (!isSearchActive.current) return;
     const highlights = Array.from(terminalRef.current?.getElementsByClassName('search-highlight') || []);
     if (highlights.length === 0) return;
     
@@ -99,6 +138,7 @@ const TerminalSearch = forwardRef<TerminalSearchRef, TerminalSearchProps>(({ isV
   };
 
   const highlightMatches = () => {
+    if (!isSearchActive.current) return;
     clearHighlights();
     
     const matches = findMatches();
@@ -138,11 +178,14 @@ const TerminalSearch = forwardRef<TerminalSearchRef, TerminalSearchProps>(({ isV
     if (isVisible && searchInputRef.current) {
       searchInputRef.current.focus();
       searchInputRef.current.select();
+      isSearchActive.current = true;
     }
   }, [isVisible]);
 
   // Gestion des raccourcis clavier pour la navigation dans les résultats
   const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (!isSearchActive.current) return;
+    
     // Ne traiter les événements que si l'input de recherche a le focus
     if (document.activeElement !== searchInputRef.current) return;
 
@@ -176,6 +219,11 @@ const TerminalSearch = forwardRef<TerminalSearchRef, TerminalSearchProps>(({ isV
 
   // Mise à jour des résultats de recherche
   useEffect(() => {
+    if (!isSearchActive.current) {
+      clearHighlights();
+      return;
+    }
+    
     if (!searchText) {
       clearHighlights();
       setTotalMatches(0);
@@ -184,10 +232,18 @@ const TerminalSearch = forwardRef<TerminalSearchRef, TerminalSearchProps>(({ isV
     } else {
       highlightMatches();
     }
+
+    return () => {
+      if (!isVisible) {
+        clearHighlights();
+      }
+    };
   }, [searchText, history]);
 
   // Défilement vers l'occurrence actuelle
   useEffect(() => {
+    if (!isSearchActive.current) return;
+    
     if (totalMatches > 0) {
       scrollToCurrentMatch();
     }
@@ -197,11 +253,12 @@ const TerminalSearch = forwardRef<TerminalSearchRef, TerminalSearchProps>(({ isV
   useEffect(() => {
     return () => {
       clearHighlights();
+      isSearchActive.current = false;
     };
   }, []);
 
   const handleNext = () => {
-    if (totalMatches === 0) return;
+    if (!isSearchActive.current || totalMatches === 0) return;
     
     const nextMatch = (currentMatch + 1) % totalMatches;
     setCurrentMatch(nextMatch);
@@ -213,7 +270,7 @@ const TerminalSearch = forwardRef<TerminalSearchRef, TerminalSearchProps>(({ isV
   };
 
   const handlePrevious = () => {
-    if (totalMatches === 0) return;
+    if (!isSearchActive.current || totalMatches === 0) return;
     
     const prevMatch = (currentMatch - 1 + totalMatches) % totalMatches;
     setCurrentMatch(prevMatch);
@@ -224,7 +281,14 @@ const TerminalSearch = forwardRef<TerminalSearchRef, TerminalSearchProps>(({ isV
     });
   };
 
-  if (!isVisible) return <></>;
+  const handleClose = () => {
+    clearHighlights();
+    isSearchActive.current = false;
+    onClose();
+    // Ne pas réinitialiser searchText ici
+  };
+
+  if (!isVisible) return null;
 
   return (
     <div 
@@ -273,7 +337,7 @@ const TerminalSearch = forwardRef<TerminalSearchRef, TerminalSearchProps>(({ isV
           variant="ghost"
           size="icon"
           className="h-7 w-7 p-1.5 text-gray-300 hover:text-gray-200 hover:bg-[#3e3e3e] rounded transition-colors"
-          onClick={onClose}
+          onClick={handleClose}
         >
           <X className="w-4 h-4 lucide" />
         </Button>
