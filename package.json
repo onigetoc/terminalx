@@ -4,7 +4,7 @@
   "version": "0.0.1",
   "private": true,
   "scripts": {
-    "kill-port": "npx kill-port 5173 3002",
+    "kill-port": "npx kill-port 5173 3003",
     "dev": "concurrently -k \"vite --port 5173\" \"tsx watch src/components/Terminal/server/index.ts\"",
     "frontend": "vite --port 5173",
     "server": "tsx watch src/components/Terminal/server/index.ts",

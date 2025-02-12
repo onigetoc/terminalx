@@ -11,6 +11,7 @@ import { executeCommandOnServer, CommandResult } from './services/terminalApi';
 import { formatCommand, formatTextWithLinks, FormattedOutput } from './services/terminalFormatter';
 import { initializeDirectory, updateStoredDirectory } from './utils/directoryUtils';
 import { createCommandWithTimeout, CommandTimeoutError } from './services/commandTimeout';
+import { abortChildProcess } from './utils/abortKill';
 
 interface TerminalProps {
   config?: Partial<TerminalConfig>;
@@ -57,6 +58,8 @@ const Terminal: React.FC<TerminalProps> = ({ config = {} }) => {
     
     let timeoutId: NodeJS.Timeout | undefined;
     let result: CommandResult;
+    const controller = new AbortController();
+    const { signal } = controller;
     
     try {
       const trimmedCommand = command.trim().toLowerCase();
@@ -71,6 +74,20 @@ const Terminal: React.FC<TerminalProps> = ({ config = {} }) => {
       const commandPromise = new Promise<CommandResult>(async (resolve, reject) => {
         timeoutId = setTimeout(() => {
           setShowTimeoutDialog(true);
+          setCurrentTimeoutCommand({ cancel: () => {
+            controller.abort();
+            console.log('Command aborted');
+            setHistory(prev => {
+              const newHistory = [...prev];
+              const lastIndex = newHistory.length - 1;
+              newHistory[lastIndex] = {
+                command,
+                output: 'Command aborted.',
+                isLoading: false
+              };
+              return newHistory;
+            });
+          }});
         }, 5000);
 
         try {
@@ -135,7 +152,7 @@ const Terminal: React.FC<TerminalProps> = ({ config = {} }) => {
 
   const processNextCommand = useCallback(async () => {
     if (isExecuting || commandQueue.current.length === 0) return;
-
+  
     setIsExecuting(true);
     const { command, displayInTerminal } = commandQueue.current[0];
     
@@ -151,7 +168,7 @@ const Terminal: React.FC<TerminalProps> = ({ config = {} }) => {
       }
     }
   }, [isExecuting, processCommand]);
-
+  
   const executeCommand = useCallback(async (cmd: string | string[], displayInTerminal: number = 1) => {
     const commands = Array.isArray(cmd) ? cmd : [cmd];
     
@@ -335,6 +352,27 @@ const Terminal: React.FC<TerminalProps> = ({ config = {} }) => {
     }
   }, [executeCommand]);
 
+  const handleCancelCommand = useCallback(() => {
+    if (currentTimeoutCommand) {
+      currentTimeoutCommand.cancel();
+      setShowTimeoutDialog(false);
+      console.log('Command aborted.');
+      setHistory(prev => {
+        const newHistory = [...prev];
+        const lastIndex = newHistory.length - 1;
+        newHistory[lastIndex] = {
+          ...newHistory[lastIndex],
+          output: 'Command aborted.',
+          isLoading: false
+        };
+        return newHistory;
+      });
+    }
+    // Clear the command queue and reset the isExecuting state
+    commandQueue.current = [];
+    setIsExecuting(false);
+  }, [currentTimeoutCommand]);
+
   // Modifier la condition de rendu pour utiliser CSS au lieu de null
   return (
     <div className={`${!isVisible ? 'hidden' : ''}`}>
@@ -380,10 +418,7 @@ const Terminal: React.FC<TerminalProps> = ({ config = {} }) => {
             setContentKey={setContentKey}
             showTimeoutDialog={showTimeoutDialog}
             timeoutDialogKey={contentKey}
-            onCancelCommand={() => {
-              currentTimeoutCommand?.cancel();
-              setShowTimeoutDialog(false);
-            }}
+            onCancelCommand={handleCancelCommand}
             onContinueWaiting={() => setShowTimeoutDialog(false)}
           />
         )}
