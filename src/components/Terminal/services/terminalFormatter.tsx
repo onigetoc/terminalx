@@ -1,6 +1,5 @@
 import React from 'react';
 import type { ReactNode } from 'react';
-import type { MouseEvent as ReactMouseEvent } from 'react';
 import Ansi from 'ansi-to-react';
 
 // Utility function to properly decode text ensuring UTF-8 compatibility
@@ -19,67 +18,32 @@ const URL_REGEX = /https?:\/\/[^\s"')]+/g;
 const PATH_REGEX = /(?:["]?[A-Za-z]:\\(?:[^\\/:*?<>|\r\n]+\\)*[^\\/:*?<>|\r\n]+["]?|\(["]?[A-Za-z]:\\(?:[^\\/:*?<>|\r\n]+\\)*[^\\/:*?<>|\r\n]+["]?\))/g;
 
 // Regex pour détecter les drapeaux de commande (options)
-const FLAG_PATTERN = /(?<=\s)(-{1,2}\w+)/g;
+const FLAG_PATTERN = /(\s|^)(-{1,2}[a-zA-Z0-9]+)/g;
 
 interface FormatOptions {
   convertPaths?: boolean;
-}
-
-interface LinkProps {
-  href: string;
-  children: string;
-  className?: string;
 }
 
 /**
  * Format command with syntax highlighting 
  */
 export function formatCommand(command: string): React.ReactNode {
-  // Sépare le premier mot (la commande) du reste
-  const [firstWord, ...rest] = command.split(/\s+/);
-  const remainingText = rest.join(' ');
-
-  // Split le reste du texte pour les drapeaux
-  const parts = remainingText.split(FLAG_PATTERN);
-  const flags = Array.from(remainingText.matchAll(FLAG_PATTERN));
-  let flagIndex = 0;
+  const [cmd, ...args] = command.split(/\s+/);
 
   return (
     <span className="terminal-command">
-      <span className="text-yellow-300">{firstWord}</span>
-      {/* Ajouter un espace après la commande s'il y a un texte restant */}
-      {remainingText && <span>&nbsp;</span>}
-      {parts.map((part, index) => {
-        if (index % 2 === 1) {
-          // C'est un drapeau trouvé
-          return <span key={index} className="text-gray-400">{flags[flagIndex++][0]}</span>;
-        }
-        return part;
-      })}
+      <span className="text-yellow-300">{cmd}</span>
+      {args.map((part, index) => (
+        <React.Fragment key={index}>
+          {' '}
+          {part.startsWith('-') ? (
+            <span className="text-gray-400">{part}</span>
+          ) : (
+            part
+          )}
+        </React.Fragment>
+      ))}
     </span>
-  );
-}
-
-/**
- * Creates a clickable link component
- */
-function createLink(content: string, href: string, key: number): JSX.Element {
-  const handleClick = (e: ReactMouseEvent<HTMLAnchorElement>) => {
-    e.preventDefault();
-    window.open(href, '_blank');
-  };
-
-  return (
-    <a
-      key={key}
-      href={href}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="terminal-link"
-      onClick={handleClick}
-    >
-      {content}
-    </a>
   );
 }
 

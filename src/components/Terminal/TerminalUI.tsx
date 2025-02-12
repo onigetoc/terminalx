@@ -39,6 +39,10 @@ interface TerminalUIProps {
   setHistory: React.Dispatch<React.SetStateAction<Array<{ command: string; output: string; isLoading?: boolean }>>>;
   contentKey: number;
   setContentKey: React.Dispatch<React.SetStateAction<number>>;
+  showTimeoutDialog: boolean;
+  timeoutDialogKey: number;
+  onCancelCommand: () => void;
+  onContinueWaiting: () => void;
 }
 
 export function TerminalUI(props: TerminalUIProps): JSX.Element {
@@ -77,7 +81,7 @@ export function TerminalUI(props: TerminalUIProps): JSX.Element {
 
   // Améliorons également les gestionnaires de focus/blur
   const handleFocus = useCallback(() => {
-    console.log('Terminal focused');
+    // console.log('Terminal focused');
     setIsTerminalFocused(true);
   }, []);
 
@@ -312,9 +316,7 @@ export function TerminalUI(props: TerminalUIProps): JSX.Element {
                 <div key={index} className="terminal-line mb-2">
                   <div className="terminal-prompt-line flex items-center">
                     <span className="terminal-prompt mr-2">{promptSymbol}</span>
-                    <div className="terminal-command">
-                      {props.formatCommand(entry.command)}
-                    </div>
+                    {props.formatCommand(entry.command)}
                   </div>
                   <div className="terminal-output-line ml-4 text-left">
                     {entry.isLoading ? (
@@ -329,6 +331,28 @@ export function TerminalUI(props: TerminalUIProps): JSX.Element {
                 </div>
               ))}
             </div>
+
+            {props.showTimeoutDialog && (
+              <div className="terminal-timeout-dialog" key={props.timeoutDialogKey}>
+                <div className="terminal-timeout-message">
+                  Command is taking longer than expected. Continue waiting?
+                </div>
+                <div className="terminal-timeout-buttons">
+                  <button
+                    className="terminal-button terminal-button-red"
+                    onClick={props.onCancelCommand}
+                  >
+                    Cancel Command
+                  </button>
+                  <button
+                    className="terminal-button terminal-button-blue"
+                    onClick={props.onContinueWaiting}
+                  >
+                    Continue Waiting
+                  </button>
+                </div>
+              </div>
+            )}
 
             {!props.mergedConfig.readOnlyMode && (
               <form onSubmit={props.handleSubmit} className="terminal-input-area flex items-center gap-2 p-2 border-t border-[#333]">

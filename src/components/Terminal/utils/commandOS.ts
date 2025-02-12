@@ -4,7 +4,7 @@ type CommandMapping = Record<string, Record<OsType, string>>;
 export const commandMap: CommandMapping = {
   'type': {
     'windows': 'type',
-    'macos': 'cat',
+    'macos': 'cat', 
     'linux': 'cat'
   },
   'cat': {
@@ -51,6 +51,16 @@ export const commandMap: CommandMapping = {
     'windows': 'explorer',
     'macos': 'open',
     'linux': 'open'
+  },
+  'start': {
+    'windows': 'start',
+    'macos': 'xdg-open',
+    'linux': 'xdg-open'
+  },
+  'xdg-open': {
+    'windows': 'start',
+    'macos': 'xdg-open',
+    'linux': 'xdg-open'
   },
   'del': {
     'windows': 'del',
@@ -173,9 +183,9 @@ export function translateCommand(command: string): string {
   const baseCommand = words[0].toLowerCase();
 
   // Debug logs pour voir ce qui se passe
-  console.log('OS détecté:', os);
-  console.log('Commande reçue:', command);
-  console.log('Commande de base:', baseCommand);
+  // console.log('OS détecté:', os);
+  // console.log('Commande reçue:', command);
+  // console.log('Commande de base:', baseCommand);
 
   // Ne pas retourner immédiatement si URL - ça empêchait la traduction de 'open'
   const commandEntry = Object.entries(commandMap).find(([key, value]) => {

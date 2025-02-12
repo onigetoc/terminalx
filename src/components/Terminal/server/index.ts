@@ -6,7 +6,7 @@ import net from 'net';
 import fs from 'fs';
 import path from 'path';
 
-const app = fastify({ logger: true });
+const app = fastify({ logger: false });
 
 // Register CORS plugin
 app.register(cors);

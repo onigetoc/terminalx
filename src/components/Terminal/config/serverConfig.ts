@@ -1,7 +1,7 @@
 export const SERVER_CONFIG = {
   BASE_URL: 'http://localhost',
   PORT_RANGE: {
-    START: 3000,
+    START: 3003,
     END: 3010
   },
   MAX_RETRY_ATTEMPTS: 3,

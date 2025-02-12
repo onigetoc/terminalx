@@ -128,6 +128,7 @@ git clone https://github.com/onigetoc/fake-terminal-experience.git
 
 ## Usage
 
+### Basic Terminal Component
 To use the terminal in your React component, import and add the Terminal component:
 ```javascript
 import Terminal from "@/components/Terminal/Terminal";
@@ -143,6 +144,44 @@ const YourComponent = () => {
 
 export default YourComponent;
 ```
+
+### Executing Commands
+You can execute commands in two ways:
+
+#### From within the terminal
+Simply type your command and press Enter.
+
+#### From anywhere in your application
+The terminal exposes a global `executeCommand` function that you can use from anywhere:
+
+```javascript
+// Single command
+executeCommand("npm -v");
+
+// Multiple commands
+executeCommand(["help", "about", "node -v"]);
+
+// Execute without displaying in terminal (second parameter = 0)
+executeCommand("npm -v", 0);
+```
+
+### Toggle Terminal Visibility
+You can toggle the terminal's visibility from anywhere in your application using the global `handleToggleTerminal` function:
+
+```javascript
+// In any component or event handler:
+<button onClick={() => window.handleToggleTerminal?.()}>
+  Toggle Terminal
+</button>
+```
+
+This function is automatically available after importing the Terminal component, no additional imports needed.
+
+#### Terminal Visibility Lifecycle
+- The terminal maintains its state and content even when hidden
+- Toggling visibility only affects the display, not the terminal's state
+- Commands can still be executed while the terminal is hidden
+- All history and context is preserved between visibility toggles
 
 ### Example Usage
 
@@ -360,5 +399,3 @@ bolt-terminal
 ├─ tsconfig.node.json
 ├─ tsconfig.server.json
 └─ vite.config.ts
-
-```

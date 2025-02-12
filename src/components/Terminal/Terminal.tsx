@@ -10,10 +10,16 @@ import { isCustomCommand, executeCustomCommand } from './services/customCommands
 import { executeCommandOnServer, CommandResult } from './services/terminalApi';
 import { formatCommand, formatTextWithLinks, FormattedOutput } from './services/terminalFormatter';
 import { initializeDirectory, updateStoredDirectory } from './utils/directoryUtils';
+import { createCommandWithTimeout, CommandTimeoutError } from './services/commandTimeout';
 
 interface TerminalProps {
   config?: Partial<TerminalConfig>;
 }
+
+// Exporter la fonction de toggle pour une utilisation depuis l'extérieur
+export const handleToggleTerminal = () => {
+  terminalConfig.toggleVisibility();
+};
 
 const Terminal: React.FC<TerminalProps> = ({ config = {} }) => {
   const mergedConfig = { ...defaultConfig, ...config };
@@ -29,6 +35,8 @@ const Terminal: React.FC<TerminalProps> = ({ config = {} }) => {
   const [command, setCommand] = useState('');
   const [contentKey, setContentKey] = useState(0);
   const [isExecuting, setIsExecuting] = useState(false);
+  const [showTimeoutDialog, setShowTimeoutDialog] = useState(false);
+  const [currentTimeoutCommand, setCurrentTimeoutCommand] = useState<{ cancel: () => void } | null>(null);
 
   const terminalRef = useRef<HTMLDivElement>(null);
   const observerRef = useRef<MutationObserver | null>(null);
@@ -46,10 +54,12 @@ const Terminal: React.FC<TerminalProps> = ({ config = {} }) => {
     if (displayInTerminal) {
       setHistory(prev => [...prev, { command, output: '', isLoading: true }]);
     }
-
+    
+    let timeoutId: NodeJS.Timeout | undefined;
+    let result: CommandResult;
+    
     try {
       const trimmedCommand = command.trim().toLowerCase();
-      let result: CommandResult;
 
       if (trimmedCommand === 'clear' || trimmedCommand === 'cls') {
         setHistory([]);
@@ -58,21 +68,34 @@ const Terminal: React.FC<TerminalProps> = ({ config = {} }) => {
         return;
       }
 
-      if (isCustomCommand(command)) {
-        result = await executeCustomCommand(command);
-        // Si la commande personnalisée doit être exécutée sur le serveur
-        if ('executeOnServer' in result && result.executeOnServer && 'command' in result) {
-          const translatedCommand = translateCommand(result.command as string);
-          result = await executeCommandOnServer(translatedCommand);
+      const commandPromise = new Promise<CommandResult>(async (resolve, reject) => {
+        timeoutId = setTimeout(() => {
+          setShowTimeoutDialog(true);
+        }, 5000);
+
+        try {
+          if (isCustomCommand(command)) {
+            result = await executeCustomCommand(command);
+            if ('executeOnServer' in result && result.executeOnServer && 'command' in result) {
+              const translatedCommand = translateCommand(result.command as string);
+              result = await executeCommandOnServer(translatedCommand);
+            }
+          } else {
+            const translatedCommand = translateCommand(command);
+            result = await executeCommandOnServer(translatedCommand);
+          }
+          clearTimeout(timeoutId);
+          resolve(result);
+        } catch (error) {
+          clearTimeout(timeoutId);
+          reject(error);
         }
-      } else {
-        const translatedCommand = translateCommand(command);
-        result = await executeCommandOnServer(translatedCommand);
-      }
+      });
+
+      result = await commandPromise;
 
       // Update directory state and storage when cd command succeeds
       if (result.currentDirectory) {
-        // Update storage for all cd commands
         const trimmedCmd = command.trim().toLowerCase();
         if (trimmedCmd === 'cd' || trimmedCmd === 'cd..' || trimmedCmd.startsWith('cd ')) {
           updateStoredDirectory(result.currentDirectory);
@@ -94,6 +117,7 @@ const Terminal: React.FC<TerminalProps> = ({ config = {} }) => {
         setTimeout(scrollToBottom, 0);
       }
     } catch (error: unknown) {
+      clearTimeout(timeoutId);
       if (displayInTerminal) {
         setHistory(prev => {
           const newHistory = [...prev];
@@ -187,6 +211,24 @@ const Terminal: React.FC<TerminalProps> = ({ config = {} }) => {
       window.removeEventListener('terminal-visibility-change', handleVisibilityChange);
     };
   }, []);
+
+  // Initialize terminal controls at startup
+  useEffect(() => {
+    // Initialize executeCommand
+    setTerminalExecutor(executeCommand);
+
+    // Make handleToggleTerminal available globally for backward compatibility
+    if (typeof window !== 'undefined') {
+      window.handleToggleTerminal = handleToggleTerminal;
+    }
+
+    return () => {
+      setTerminalExecutor(null);
+      if (typeof window !== 'undefined') {
+        window.handleToggleTerminal = undefined;
+      }
+    };
+  }, [executeCommand]);
 
   // Scroll to bottom when history changes
   useEffect(() => {
@@ -293,56 +335,86 @@ const Terminal: React.FC<TerminalProps> = ({ config = {} }) => {
     }
   }, [executeCommand]);
 
-  // Modifier la condition de rendu pour cacher complètement le composant
-  if (!isVisible) {
-    return null; // Ne rien rendre du tout quand isVisible est false
-  }
-
-  if (!isOpen) {
-    return (
-      <Button
-        variant="default"
-        className="fixed bottom-4 right-4 bg-[#1e1e1e] text-white floating-button rounded-[8px]" // Utilisation d'une valeur directe
-        onClick={() => {
-          setIsOpen(true);
-        }}
-      >
-        <TerminalIcon className="w-4 h-4 mr-2 lucide" />
-        Open Terminal
-      </Button>
-    );
-  }
-
+  // Modifier la condition de rendu pour utiliser CSS au lieu de null
   return (
-    <TerminalUI
-      isOpen={isOpen}
-      isFullscreen={isFullscreen}
-      isMinimized={isMinimized}
-      height={height}
-      isDragging={isDragging}
-      currentDirectory={currentDirectory}
-      osInfo={osInfo}
-      history={history}
-      command={command}
-      terminalRef={terminalRef}
-      handleMouseDown={handleMouseDown}
-      handleKillTerminal={handleKillTerminal}
-      setIsOpen={handleClose}
-      setIsMinimized={setIsMinimized}
-      setIsFullscreen={setIsFullscreen}
-      handleSubmit={handleSubmit}
-      setCommand={setCommand}
-      executeCommand={executeCommand}
-      mergedConfig={mergedConfig}
-      formatCommand={formatCommandWithHighlight}
-      formatOutput={formatOutput}
-      onFolderSelect={onFolderSelect}
-      observerRef={observerRef}
-      contentRef={contentRef}
-      setHistory={setHistory}
-      contentKey={contentKey}
-      setContentKey={setContentKey}
-    />
+    <>
+      {showTimeoutDialog && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-[#1e1e1e] text-white p-6 rounded-lg shadow-lg">
+            <h2 className="text-xl font-semibold mb-4">Command Timeout</h2>
+            <p className="mb-6">The command has been running for 30 seconds. Would you like to continue waiting or cancel it?</p>
+            <div className="flex justify-end gap-4">
+              <button
+                className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
+                onClick={() => {
+                  currentTimeoutCommand?.cancel();
+                  setShowTimeoutDialog(false);
+                }}
+              >
+                Cancel Command
+              </button>
+              <button
+                className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+                onClick={() => setShowTimeoutDialog(false)}
+              >
+                Continue Waiting
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      <div className={`${!isVisible ? 'hidden' : ''}`}>
+        {!isOpen ? (
+          <Button
+            variant="default"
+            className="fixed bottom-4 right-4 bg-[#1e1e1e] text-white floating-button rounded-[8px]"
+            onClick={() => {
+              setIsOpen(true);
+            }}
+          >
+            <TerminalIcon className="w-4 h-4 mr-2 lucide" />
+            Open Terminal
+          </Button>
+        ) : (
+          <TerminalUI
+            isOpen={isOpen}
+            isFullscreen={isFullscreen}
+            isMinimized={isMinimized}
+            height={height}
+            isDragging={isDragging}
+            currentDirectory={currentDirectory}
+            osInfo={osInfo}
+            history={history}
+            command={command}
+            terminalRef={terminalRef}
+            handleMouseDown={handleMouseDown}
+            handleKillTerminal={handleKillTerminal}
+            setIsOpen={handleClose}
+            setIsMinimized={setIsMinimized}
+            setIsFullscreen={setIsFullscreen}
+            handleSubmit={handleSubmit}
+            setCommand={setCommand}
+            executeCommand={executeCommand}
+            mergedConfig={mergedConfig}
+            formatCommand={formatCommandWithHighlight}
+            formatOutput={formatOutput}
+            onFolderSelect={onFolderSelect}
+            observerRef={observerRef}
+            contentRef={contentRef}
+            setHistory={setHistory}
+            contentKey={contentKey}
+            setContentKey={setContentKey}
+            showTimeoutDialog={showTimeoutDialog}
+            timeoutDialogKey={contentKey}
+            onCancelCommand={() => {
+              currentTimeoutCommand?.cancel();
+              setShowTimeoutDialog(false);
+            }}
+            onContinueWaiting={() => setShowTimeoutDialog(false)}
+          />
+        )}
+      </div>
+    </>
   );
 };
 

@@ -1,6 +1,7 @@
 declare global {
   interface Window {
     executeCommand: (cmd: string | string[], displayInTerminal?: number) => Promise<void>;
+    handleToggleTerminal?: () => void;
   }
 }
 

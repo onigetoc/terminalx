@@ -1,22 +1,13 @@
 import Terminal from "@/components/Terminal/Terminal";
-import { terminalConfig } from '@/components/Terminal/config/terminalConfig';
 import { Button } from "@/components/ui/button";
 import { Play, Terminal as TerminalIcon, Globe } from "lucide-react";
-import { useState } from 'react';
 
 const Index = () => {
-  const [showTerminal, setShowTerminal] = useState(true);
-
-  const handleToggleTerminal = () => {
-    setShowTerminal(!showTerminal);
-    terminalConfig.toggleVisibility();
-  };
-
   return (
     <div className="min-h-screen bg-background">
       <div className="container mx-auto p-4">
         <h1 className="text-4xl font-bold mb-4">Terminal Demo</h1>
-        <meta charSet="UTF-8"></meta> {/* Correction ici: charset -> charSet */}
+        <meta charSet="UTF-8"></meta>
         <p className="text-lg text-muted-foreground mb-4">
           Try running some commands like "npm -v" or type "help" to see available commands.
         </p>
@@ -54,7 +45,7 @@ const Index = () => {
           Or trigger one or multiple commands from everywhere.
         </p>
 
-        <div className="flex flex-wrap gap-2 mb-8">  {/* Ajout de flex-wrap ici */}
+        <div className="flex flex-wrap gap-2 mb-8">
           <Button
             variant="outline"
             onClick={() => {
@@ -62,15 +53,15 @@ const Index = () => {
                 .then(() => console.log("Commande terminée"))
                 .catch((err) => console.error("Erreur:", err));
             }}
-            className="flex items-center gap-2 border-gray-500"  // Voici la bonne classe Tailwind
+            className="flex items-center gap-2 border-gray-500"
           >
             <Play className="h-4 w-4" />
             Run npm -v
           </Button>
           <Button
             variant="outline"
-            onClick={() => executeCommand(['help', 'npm ls', 'about'])} // Exécution silencieuse
-            className="flex items-center gap-2 border-gray-500"  // Voici la bonne classe Tailwind
+            onClick={() => executeCommand(['help', 'npm ls', 'about'])}
+            className="flex items-center gap-2 border-gray-500"
           >
             <TerminalIcon className="h-4 w-4" />
             Help, npm ls & About
@@ -78,7 +69,7 @@ const Index = () => {
           <Button
             variant="outline"
             onClick={() => executeCommand('open https://www.google.com/search?q=fake+terminal')}
-            className="flex items-center gap-2 border-gray-500"  // Voici la bonne classe Tailwind
+            className="flex items-center gap-2 border-gray-500"
           >
             <Globe className="h-4 w-4" />
             Open Browser & Google search
@@ -86,7 +77,7 @@ const Index = () => {
           <Button
             variant="outline"
             onClick={() => executeCommand('start https://github.com/onigetoc/fake-terminal-experience',0)}
-            className="flex items-center gap-2 border-gray-500"  // Voici la bonne classe Tailwind
+            className="flex items-center gap-2 border-gray-500"
           >
             <Globe className="h-4 w-4" />
             Open Github Project in browser
@@ -94,7 +85,7 @@ const Index = () => {
           <Button
             variant="outline"
             onClick={() => executeCommand('tree /f')}
-            className="flex items-center gap-2 border-gray-500"  // Voici la bonne classe Tailwind
+            className="flex items-center gap-2 border-gray-500"
           >
             <TerminalIcon className="h-4 w-4" />
             Get folder tree
@@ -102,12 +93,11 @@ const Index = () => {
           <Button
             variant="outline"
             onClick={() => executeCommand('wmic product get name')}
-            className="flex items-center gap-2 border-gray-500"  // Voici la bonne classe Tailwind
+            className="flex items-center gap-2 border-gray-500"
           >
             <TerminalIcon className="h-4 w-4" />
             Programs installed on your PC
           </Button>
-          {/* Ajout du bouton pour exécuter les commandes Git */}
           <Button
             variant="outline"
             onClick={() => {
@@ -119,31 +109,29 @@ const Index = () => {
                 .then(() => console.log("Commit et push terminés"))
                 .catch((err) => console.error("Erreur:", err));
             }}
-            className="flex items-center gap-2 border-gray-500"  // Voici la bonne classe Tailwind
+            className="flex items-center gap-2 border-gray-500"
           >
             <TerminalIcon className="h-4 w-4" />
             Commit & Push
           </Button>
-          {/* Ajout du bouton de test */}
           <Button
             variant="outline"
-            onClick={handleToggleTerminal}
-            className="flex items-center gap-2 border-gray-500"  // Voici la bonne classe Tailwind
+            onClick={() => window.handleToggleTerminal?.()}
+            className="flex items-center gap-2 border-gray-500"
           >
             <TerminalIcon className="h-4 w-4" />
-            {showTerminal ? 'Hide Terminal' : 'Show Terminal'}
+            Toggle Terminal
           </Button>
         </div>
       </div>
-      {showTerminal && (
-        <Terminal 
-          config={{
-            readOnlyMode: false,
-            initialState: 'open',
-            defaultHeight: 340,
-          }} 
-        />
-      )}
+      
+      <Terminal 
+        config={{
+          readOnlyMode: false,
+          initialState: 'open',
+          defaultHeight: 340,
+        }} 
+      />
     </div>
   );
 };

@@ -54,21 +54,22 @@ export const terminalConfig = {
       ...terminalConfig.private.current,
       ...newConfig
     };
+    // Émettre un événement si la visibilité change
+    if ('showTerminal' in newConfig) {
+      window.dispatchEvent(new CustomEvent('terminal-visibility-change'));
+    }
     return terminalConfig.private.current;
   },
   
   reset: () => {
     terminalConfig.private.current = { ...defaultConfig };
+    window.dispatchEvent(new CustomEvent('terminal-visibility-change'));
     return terminalConfig.private.current;
   },
 
   toggleVisibility: (show?: boolean) => {
-    terminalConfig.private.current.showTerminal = 
-      show ?? !terminalConfig.private.current.showTerminal;
-    
-    // Émettre un événement quand la visibilité change
-    window.dispatchEvent(new CustomEvent('terminal-visibility-change'));
-    
+    const newValue = show ?? !terminalConfig.private.current.showTerminal;
+    terminalConfig.set({ showTerminal: newValue });
     return terminalConfig.private.current;
   }
 };
