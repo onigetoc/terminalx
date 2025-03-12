@@ -1,6 +1,12 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Button } from "@/components/ui/button";
 import { Terminal as TerminalIcon } from 'lucide-react';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import '@/components/Terminal/styles/terminal.css';
 import { TerminalUI } from './TerminalUI';
 import { TerminalConfig, defaultConfig, terminalConfig } from '@/components/Terminal/config/terminalConfig'; // Ajout de terminalConfig ici
@@ -52,6 +58,8 @@ const Terminal: React.FC<TerminalProps> = ({ config = {} }) => {
 
 
   const processCommand = useCallback(async (command: string, displayInTerminal: number) => {
+    console.log('🚀 Executing command:', command);
+    
     if (displayInTerminal) {
       setHistory(prev => [...prev, { command, output: '', isLoading: true }]);
     }
@@ -93,17 +101,23 @@ const Terminal: React.FC<TerminalProps> = ({ config = {} }) => {
         try {
           if (isCustomCommand(command)) {
             result = await executeCustomCommand(command);
+            console.log('📝 Custom command result:', result);
+            
             if ('executeOnServer' in result && result.executeOnServer && 'command' in result) {
               const translatedCommand = translateCommand(result.command as string);
+              console.log('🔄 Translated command:', translatedCommand);
               result = await executeCommandOnServer(translatedCommand);
             }
           } else {
             const translatedCommand = translateCommand(command);
+            console.log('🔄 Translated command:', translatedCommand);
             result = await executeCommandOnServer(translatedCommand);
           }
+          console.log('✅ Command response:', result);
           clearTimeout(timeoutId);
           resolve(result);
         } catch (error) {
+          console.error('❌ Command error:', error);
           clearTimeout(timeoutId);
           reject(error);
         }
@@ -377,16 +391,24 @@ const Terminal: React.FC<TerminalProps> = ({ config = {} }) => {
   return (
     <div className={`${!isVisible ? 'hidden' : ''}`}>
         {!isOpen ? (
-          <Button
-            variant="default"
-            className="fixed bottom-4 right-4 bg-[#1e1e1e] text-white floating-button rounded-[8px]"
-            onClick={() => {
-              setIsOpen(true);
-            }}
-          >
-            <TerminalIcon className="w-4 h-4 mr-2 lucide" />
-            Open Terminal
-          </Button>
+          <TooltipProvider>
+            <Tooltip delayDuration={100}>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="default"
+                  className="fixed bottom-4 right-4 px-2.5 bg-[#1e1e1e] text-white floating-button rounded-[8px]"
+                  onClick={() => {
+                    setIsOpen(true);
+                  }}
+                >
+                  <TerminalIcon className="w-4 h-4 lucide" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>Open Terminal</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
         ) : (
           <TerminalUI
             isOpen={isOpen}

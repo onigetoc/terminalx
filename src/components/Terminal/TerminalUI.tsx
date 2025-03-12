@@ -136,11 +136,10 @@ export function TerminalUI(props: TerminalUIProps): JSX.Element {
   if (!props.isOpen) {
     return (
       <Button
-        className="fixed bottom-4 right-4 bg-[#1e1e1e] text-white floating-button"
+        className="fixed bottom-4 right-4 bg-[#1e1e1e] text-white floating-button h-9 w-9"
         onClick={() => props.setIsOpen(true)}
       >
-        <TerminalIcon className="w-4 h-4 mr-2 lucide" />
-        Open Terminal
+        <TerminalIcon className="w-4 h-4 lucide" />
       </Button>
     );
   }

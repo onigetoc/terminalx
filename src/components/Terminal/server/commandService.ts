@@ -51,6 +51,7 @@ export const executeCommand = async (command: string) => {
 
   if (cmd.startsWith('cd')) {
     const pathArg = cmd.slice(2).trim();
+
     let targetPath;
 
     if (!pathArg) {
