@@ -1,10 +1,11 @@
 import React, { useRef, useCallback, useState, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
 import {
-  BadgeX, FolderOpen, Plus, Minus, Maximize2, Minimize2, X, Terminal as TerminalIcon, Loader2, Eraser, HelpCircle, Info, History
+  BadgeX, FolderOpen, Plus, Minus, Maximize2, Minimize2, X, Terminal as TerminalIcon, Eraser, HelpCircle, Info, History
 } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import TerminalSearch from './TerminalSearch';
+import { TerminalSpinner } from './TerminalSpinner';
 
 interface TerminalUIProps {
   isOpen: boolean;
@@ -319,10 +320,7 @@ export function TerminalUI(props: TerminalUIProps): JSX.Element {
                   </div>
                   <div className="terminal-output-line ml-4 text-left">
                     {entry.isLoading ? (
-                      <div className="flex items-center gap-2 text-gray-400">
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        <span>Executing command...</span>
-                      </div>
+                      <TerminalSpinner command={entry.command} />
                     ) : (
                       props.formatOutput(entry.output)
                     )}

@@ -344,3 +344,35 @@
 .terminal-button-blue:hover {
   background-color: #1d4ed8;
 }
+
+/* Spinner style CLI (pattern Gemini) */
+.terminal-spinner {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #9ca3af;
+  font-family: inherit;
+  white-space: nowrap;
+}
+
+/* Frame braille du spinner */
+.terminal-spinner-frame {
+  display: inline-block;
+  color: #569cd6; /* Bleu VS Code, cohérent avec le thème du terminal */
+  font-weight: 700;
+  font-size: 1.05em;
+  min-width: 12px;
+  text-align: center;
+}
+
+/* Texte de statut */
+.terminal-spinner-status {
+  color: #d4d4d4;
+}
+
+/* Barre de progression indéterminée style CLI */
+.terminal-spinner-bar {
+  color: #6a9955; /* Vert commentaire VS Code */
+  letter-spacing: 1px;
+  user-select: none;
+}
