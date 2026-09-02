@@ -1,11 +1,12 @@
 import React, { useRef, useCallback, useState, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
 import {
-  BadgeX, FolderOpen, Plus, Minus, Maximize2, Minimize2, X, Terminal as TerminalIcon, Eraser, HelpCircle, Info, History
+  BadgeX, FolderOpen, Plus, Minus, Maximize2, Minimize2, X, Terminal as TerminalIcon, Eraser, HelpCircle, Info, History, MonitorPlay
 } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import TerminalSearch from './TerminalSearch';
 import { TerminalSpinner } from './TerminalSpinner';
+import { InteractiveTerminal } from './InteractiveTerminal';
 
 interface TerminalUIProps {
   isOpen: boolean;
@@ -50,7 +51,14 @@ export function TerminalUI(props: TerminalUIProps): JSX.Element {
   const [isTerminalFocused, setIsTerminalFocused] = React.useState(false);
   const searchRef = useRef<{ removeAllHighlights: () => void; focus: () => void } | null>(null);
   const [isSearchVisible, setIsSearchVisible] = useState(false);
+  const [interactiveMode, setInteractiveMode] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
+
+  // Bascule entre le terminal "faux" (historique) et le terminal interactif
+  // (xterm.js + pseudo-terminal) qui permet de lancer claude, opencode, vim…
+  const toggleInteractiveMode = useCallback(() => {
+    setInteractiveMode(prev => !prev);
+  }, []);
 
   // Gestion du raccourci clavier Ctrl+F pour la recherche
   useEffect(() => {
@@ -232,6 +240,27 @@ export function TerminalUI(props: TerminalUIProps): JSX.Element {
                     <Button
                       variant="ghost"
                       size="icon"
+                      data-active={interactiveMode}
+                      className="interactive-mode-button bg-transparent border-none hover:bg-[#333] text-[#d4d4d4] hover:text-[#fff] h-6 w-6 transition-colors"
+                      onClick={toggleInteractiveMode}
+                    >
+                      <MonitorPlay className="h-4 w-4 lucide" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className={tooltipStyle}>
+                    <p>
+                      {interactiveMode
+                        ? 'Quitter le terminal interactif'
+                        : 'Terminal interactif (Claude/OpenCode)'}
+                    </p>
+                  </TooltipContent>
+                </Tooltip>
+
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
                       className="bg-transparent border-none hover:bg-[#333] text-[#d4d4d4] hover:text-[#fff] h-6 w-6 transition-colors"
                       onClick={() => props.setIsMinimized(!props.isMinimized)}
                     >
@@ -289,8 +318,15 @@ export function TerminalUI(props: TerminalUIProps): JSX.Element {
         {!props.isMinimized && (
           <div
             className="terminal-content-wrapper"
-            key={props.contentKey}
+            key={interactiveMode ? `interactive-${props.contentKey}` : props.contentKey}
           >
+            {interactiveMode ? (
+              <InteractiveTerminal
+                currentDirectory={props.currentDirectory}
+                className="interactive-terminal"
+              />
+            ) : (
+            <>
             <TerminalSearch
               ref={searchRef}
               isVisible={isSearchVisible}
@@ -420,6 +456,8 @@ export function TerminalUI(props: TerminalUIProps): JSX.Element {
                   </TooltipProvider>
                 </div>
               </form>
+            )}
+            </>
             )}
           </div>
         )}

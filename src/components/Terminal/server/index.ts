@@ -1,6 +1,7 @@
 import fastify, { FastifyRequest } from 'fastify';
 import cors from '@fastify/cors';
 import { executeCommand, getCurrentDirectory, initializeDirectory } from './commandService';
+import { attachPtyServer } from './ptyServer';
 import { SERVER_CONFIG } from '../config/serverConfig';
 import net from 'net';
 import fs from 'fs';
@@ -104,6 +105,11 @@ async function startServer() {
     try {
       await app.listen({ port, host: 'localhost' });
       console.log(`Terminal server running on port ${port}`);
+
+      // Attache le serveur WebSocket pour le terminal interactif (PTY).
+      // Ceci permet de lancer des CLIs interactives (Claude, OpenCode, vim…).
+      attachPtyServer(app.server);
+
       // Sauvegarder le port immédiatement après le démarrage réussi
       await savePortToFile(port);
     } catch (err) {

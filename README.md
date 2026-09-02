@@ -13,6 +13,7 @@ A realistic terminal emulator built with React, Vite, and TypeScript that provid
 - 📋 Copy/paste support
 - 🔍 Chrome-like search functionality (Ctrl+F)
 - 🚀 Execute commands from anywhere in your app
+- 🖥️ **Interactive terminal mode (PTY)** to run full-screen CLIs like Claude, OpenCode, vim, htop, nano
 
 Perfect for:
 - Web-based development environments
@@ -246,6 +247,48 @@ handleRunCommand("npm -v", 1);
 // Do not display the command in the terminal
 handleRunCommand("npm -v", 0);
 ```
+
+## Interactive Terminal (PTY)
+
+TerminalX is not only a "demo" terminal: an **interactive mode** backed by a real
+pseudo-terminal (`node-pty`) lets you launch full-screen, interactive CLIs
+(**Claude**, **OpenCode**, `vim`, `htop`, `nano`, `top`…) right in the browser.
+
+### Enable it
+
+1. Click the **🖥️ (MonitorPlay)** icon in the terminal toolbar.
+2. The history area is replaced by an `xterm.js` terminal attached to a real shell.
+3. Type your command (e.g. `claude`, `opencode`) and press `Enter`.
+4. `exit` or `Ctrl+C` to leave the session. The **Kill** (BadgeX) button restarts it.
+5. Toggle back with the same icon, or with the `Ctrl+Shift+I` keyboard shortcut.
+
+### Prerequisites
+
+- The CLIs you want to launch must be **installed and on the `PATH`** of the server
+  shell (e.g. `npm i -g @anthropic-ai/claude-code`).
+- Default shell: **PowerShell** on Windows (`powershell.exe`), otherwise
+  `$SHELL`/`bash`. Override it with the `INTERACTIVE_SHELL` environment variable.
+
+### How it works
+
+The interactive mode replaces the "one command / one response" model (which provides
+no TTY, no stdin, and buffers the output until the process exits) with a
+**persistent session**:
+
+- The server opens a pseudo-terminal via `node-pty` and **streams the ANSI output in
+  real time** over a WebSocket (`/ws/pty`).
+- Keystrokes from the browser are **written back** into the shell.
+- Window resizing is forwarded to the shell.
+
+WebSocket (JSON) protocol:
+- Client → Server: `spawn`, `input`, `resize`, `kill`
+- Server → Client: `ready`, `output`, `exit`, `error`
+
+### Simple mode vs interactive mode
+
+The terminal also keeps a "simple" mode (text history + custom commands
+`help`/`open`/`getuserlang`, cross-OS translation `ls`↔`dir`). Both modes coexist:
+switch between them with the 🖥️ button.
 
 ## Configuration
 

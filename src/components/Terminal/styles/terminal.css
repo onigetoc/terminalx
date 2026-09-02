@@ -247,7 +247,8 @@
 .terminal-content-wrapper {
   display: flex;
   flex-direction: column;
-  height: calc(100% - 40px); /* Subtract header height */
+  flex: 1; /* Remplit l'espace restant après l'en-tête et la barre de répertoire */
+  min-height: 0; /* Important pour permettre au contenu de défiler */
   overflow: hidden;
 }
 
@@ -343,6 +344,33 @@
 
 .terminal-button-blue:hover {
   background-color: #1d4ed8;
+}
+
+/* Terminal interactif (xterm.js + PTY) */
+.interactive-terminal {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  background-color: #1e1e1e;
+  padding: 2px 4px;
+}
+
+.interactive-terminal .xterm {
+  height: 100%;
+}
+
+.interactive-terminal .xterm-viewport {
+  background-color: #1e1e1e !important;
+}
+
+.interactive-terminal .xterm-screen {
+  padding: 0;
+}
+
+/* Bouton du mode interactif */
+.interactive-mode-button[data-active='true'] {
+  background-color: #0e639c !important;
+  color: #ffffff !important;
 }
 
 /* Spinner style CLI (pattern Gemini) */
