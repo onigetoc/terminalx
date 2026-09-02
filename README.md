@@ -260,7 +260,7 @@ pseudo-terminal (`node-pty`) lets you launch full-screen, interactive CLIs
 2. The history area is replaced by an `xterm.js` terminal attached to a real shell.
 3. Type your command (e.g. `claude`, `opencode`) and press `Enter`.
 4. `exit` or `Ctrl+C` to leave the session. The **Kill** (BadgeX) button restarts it.
-5. Toggle back with the same icon, or with the `Ctrl+Shift+I` keyboard shortcut.
+5. Toggle back with the same icon, or with the `Ctrl+Alt+I` keyboard shortcut.
 
 ### Prerequisites
 

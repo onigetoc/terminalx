@@ -69,24 +69,37 @@ export function TerminalUI(props: TerminalUIProps): JSX.Element {
       const terminalContainer = document.querySelector('.terminal-container');
       const hasTerminalFocus = terminalContainer?.getAttribute('tabindex') === '0' && isTerminalFocused;
 
-      // Si le terminal n'a pas le focus, on n'active pas la recherche
+      // Si le terminal n'a pas le focus, on n'active ni la recherche ni le raccourci
       if (!hasTerminalFocus) return;
 
       // Activer la recherche et focuser l'input si on utilise Ctrl+F
-      if (keyboardEvent.ctrlKey && keyboardEvent.key === 'f') {
+      if (keyboardEvent.ctrlKey && !keyboardEvent.altKey && !keyboardEvent.shiftKey && keyboardEvent.key === 'f') {
         keyboardEvent.preventDefault();
         keyboardEvent.stopPropagation();
         setIsSearchVisible(true);
         setTimeout(() => {
           searchRef.current?.focus();
         }, 0);
+        return;
+      }
+
+      // Basculer le mode interactif (terminal PTY) avec Ctrl+Alt+I.
+      // ⚠️ On n'utilise pas Ctrl+Shift+I : c'est le raccourci DevTools des
+      // navigateurs, qui n'est pas interceptable par la page.
+      if (keyboardEvent.ctrlKey && keyboardEvent.altKey && !keyboardEvent.metaKey && !keyboardEvent.shiftKey) {
+        const key = keyboardEvent.key.toLowerCase();
+        if (key === 'i') {
+          keyboardEvent.preventDefault();
+          keyboardEvent.stopPropagation();
+          toggleInteractiveMode();
+        }
       }
     };
 
-    // Attacher l'événement au niveau du document pour capturer Ctrl+F partout
+    // Attacher l'événement au niveau du document pour capturer les raccourcis
     document.addEventListener('keydown', handleKeyDown as EventListener);
     return () => document.removeEventListener('keydown', handleKeyDown as EventListener);
-  }, [isTerminalFocused]);
+  }, [isTerminalFocused, toggleInteractiveMode]);
 
   // Améliorons également les gestionnaires de focus/blur
   const handleFocus = useCallback(() => {
