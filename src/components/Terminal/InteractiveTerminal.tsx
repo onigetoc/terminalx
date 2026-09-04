@@ -79,6 +79,121 @@ export function InteractiveTerminal({ currentDirectory, className = '' }: Intera
       }
     };
 
+    // --- Copier-coller style VS Code -------------------------------------
+    // Ctrl+C (ou Cmd+C) avec sélection => copie, sans envoyer ^C au backend.
+    // Ctrl+C sans sélection => laisse passer (SIGINT, comportement normal).
+    // Ctrl+V (ou Cmd+V) => colle le presse-papiers dans le PTY.
+    const fallbackCopy = (text: string) => {
+      try {
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+      } catch {
+        /* ignore */
+      }
+    };
+
+    const copySelectionToClipboard = (selection: string) => {
+      if (!selection) return;
+      try {
+        const done = navigator.clipboard?.writeText(selection);
+        // writeText retourne une promesse : on ignore l'échec (contexte non
+        // sécurisé, permission refusée) pour ne jamais casser la frappe.
+        if (done && typeof (done as Promise<void>).catch === 'function') {
+          (done as Promise<void>).catch(() => {
+            fallbackCopy(selection);
+          });
+        }
+      } catch {
+        fallbackCopy(selection);
+      }
+    };
+
+    const pasteFromClipboard = () => {
+      try {
+        const read = navigator.clipboard?.readText?.();
+        if (read && typeof read.then === 'function') {
+          read
+            .then((text) => {
+              if (text) send({ type: 'input', data: text });
+              term.focus();
+            })
+            .catch(() => term.focus());
+        } else {
+          term.focus();
+        }
+      } catch {
+        term.focus();
+      }
+    };
+
+    term.attachCustomKeyEventHandler((event: KeyboardEvent) => {
+      const key = event.key.toLowerCase();
+      const ctrlOrMeta = event.ctrlKey || event.metaKey;
+
+      // Copie : Ctrl+C / Cmd+C uniquement si du texte est sélectionné.
+      // Sans sélection on retourne true pour envoyer ^C (SIGINT) au shell.
+      if (ctrlOrMeta && !event.altKey && key === 'c' && !event.shiftKey) {
+        if (term.hasSelection()) {
+          event.preventDefault();
+          event.stopPropagation();
+          copySelectionToClipboard(term.getSelection());
+          term.clearSelection();
+          term.focus();
+          return false;
+        }
+        return true;
+      }
+
+      // Copie explicite : Ctrl+Shift+C / Ctrl+Insert (comme VS Code).
+      if (
+        (ctrlOrMeta && event.shiftKey && key === 'c') ||
+        (event.ctrlKey && event.key === 'Insert')
+      ) {
+        if (term.hasSelection()) {
+          event.preventDefault();
+          event.stopPropagation();
+          copySelectionToClipboard(term.getSelection());
+          term.clearSelection();
+          term.focus();
+        }
+        return false;
+      }
+
+      // Coller : Ctrl+V / Cmd+V / Ctrl+Shift+V / Shift+Insert.
+      if (
+        (ctrlOrMeta && !event.altKey && key === 'v') ||
+        (!ctrlOrMeta && event.shiftKey && event.key === 'Insert')
+      ) {
+        event.preventDefault();
+        event.stopPropagation();
+        pasteFromClipboard();
+        return false;
+      }
+
+      return true;
+    });
+
+    // Clic droit style VS Code : avec sélection => copier, sinon => coller.
+    const handleContextMenu = (event: MouseEvent) => {
+      event.preventDefault();
+      if (term.hasSelection()) {
+        copySelectionToClipboard(term.getSelection());
+        term.clearSelection();
+        term.focus();
+      } else {
+        pasteFromClipboard();
+      }
+    };
+    // xterm rend son DOM dans le container : on écoute sur le container
+    // pour couvrir toutes les couches internes.
+    container.addEventListener('contextmenu', handleContextMenu);
+
     const fit = () => {
       try {
         fitAddon.fit();
@@ -167,6 +282,7 @@ export function InteractiveTerminal({ currentDirectory, className = '' }: Intera
     return () => {
       disposed = true;
       if (reconnectTimer) clearTimeout(reconnectTimer);
+      container.removeEventListener('contextmenu', handleContextMenu);
       dataDisposable.dispose();
       resizeDisposable.dispose();
       resizeObserver.disconnect();
