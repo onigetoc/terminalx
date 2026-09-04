@@ -5,6 +5,7 @@ import { attachPtyServer } from './ptyServer';
 import { SERVER_CONFIG } from '../config/serverConfig';
 import net from 'net';
 import fs from 'fs';
+import os from 'os';
 import path from 'path';
 
 const app = fastify({ logger: false });
@@ -90,6 +91,33 @@ async function startServer() {
 
     app.get('/current-directory', async () => {
       return { currentDirectory: getCurrentDirectory() };
+    });
+
+    // Upload d'un fichier glissé-déposé ou collé depuis le terminal
+    // interactif. Les navigateurs ne donnent pas le vrai chemin disque
+    // (contrairement à VS Code qui a accès à Node), on stocke donc le
+    // contenu dans le dossier temporaire système et on renvoie le chemin
+    // absolu, que l'utilisateur (ou opencode/claude) peut ensuite lire.
+    // Corps JSON : { filename, dataBase64 } — évite une dépendance multipart.
+    app.post('/pty/upload', { bodyLimit: 32 * 1024 * 1024 }, async (request: FastifyRequest<{
+      Body: { filename?: string; dataBase64?: string }
+    }>) => {
+      const { filename, dataBase64 } = request.body || {};
+      if (!filename || typeof filename !== 'string' || !dataBase64 || typeof dataBase64 !== 'string') {
+        throw new Error('Invalid upload: filename and dataBase64 are required');
+      }
+      if (dataBase64.length > 28 * 1024 * 1024) {
+        throw new Error('File too large (max ~20MB)');
+      }
+      const safe = path.basename(filename).replace(/[^a-zA-Z0-9._-]/g, '_') || 'pasted-image.png';
+      const dir = path.join(os.tmpdir(), 'terminalx-uploads');
+      await fs.promises.mkdir(dir, { recursive: true });
+      const unique = `${Date.now()}-${Math.round(Math.random() * 1e6)}-${safe}`;
+      const fullPath = path.join(dir, unique);
+      // Écriture directe en base64 : évite le type Buffer (incompatible avec
+      // @types/node@20 sur ce projet, cf. erreurs pré-existantes).
+      await fs.promises.writeFile(fullPath, dataBase64, 'base64');
+      return { path: fullPath };
     });
 
     // Ajoute une gestion d'erreur globale

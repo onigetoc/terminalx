@@ -367,6 +367,13 @@
   padding: 0;
 }
 
+/* Feedback visuel pendant un glisser-déposer de fichiers */
+.interactive-terminal.terminal-drop-active {
+  outline: 2px dashed #0e639c;
+  outline-offset: -2px;
+  background-color: rgba(14, 99, 156, 0.12);
+}
+
 /* Bouton du mode interactif */
 .interactive-mode-button[data-active='true'] {
   background-color: #0e639c !important;

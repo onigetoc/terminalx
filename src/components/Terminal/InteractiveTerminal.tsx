@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { Terminal as XTerm } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
+import { ImageAddon } from '@xterm/addon-image';
 import '@xterm/xterm/css/xterm.css';
 import { getServerUrl } from './config/serverConfig';
 import { terminalConfig } from './config/terminalConfig';
@@ -67,6 +68,22 @@ export function InteractiveTerminal({ currentDirectory, className = '' }: Intera
 
     const fitAddon = new FitAddon();
     term.loadAddon(fitAddon);
+    // Affichage d'images inline (Sixel + protocole iTerm IIP), comme le
+    // terminal intégré de VS Code : les outils CLI (opencode, etc.) qui
+    // émettent ces séquences voient leurs images rendues sur un canvas.
+    const imageAddon = new ImageAddon({
+      enableSizeReports: true,
+      pixelLimit: 16777216,
+      sixelSupport: true,
+      sixelScrolling: true,
+      sixelPaletteLimit: 256,
+      sixelSizeLimit: 25000000,
+      storageLimit: 128,
+      showPlaceholder: true,
+      iipSupport: true,
+      iipSizeLimit: 20000000
+    });
+    term.loadAddon(imageAddon);
     term.open(container);
 
     let disposed = false;
@@ -114,16 +131,105 @@ export function InteractiveTerminal({ currentDirectory, className = '' }: Intera
       }
     };
 
+    const quoteShellPath = (p: string) => {
+      const escaped = p.replace(/"/g, '\\"');
+      return /\s/.test(p) ? `"${escaped}"` : escaped;
+    };
+
+    const readFileAsBase64 = (file: File | Blob): Promise<string> =>
+      new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const result = String(reader.result || '');
+          // data:<mime>;base64,XXXX — on ne garde que la partie base64.
+          const comma = result.indexOf(',');
+          resolve(comma >= 0 ? result.slice(comma + 1) : result);
+        };
+        reader.onerror = () => reject(reader.error);
+        reader.readAsDataURL(file);
+      });
+
+    // Envoie du texte au PTY en passant par term.paste() : xterm entoure le
+    // contenu de \x1b[200~ … \x1b[201~ quand l'app a activé le bracketed paste
+    // (mode 2004, cas de claude/opencode/pi). Sans ça, le texte arrive comme
+    // des frappes brutes et les TUI l'interprètent mal (lignes exécutées
+    // une par une, pas de placeholder "[pasted N lines]").
+    const pasteInput = (text: string) => {
+      try {
+        term.paste(text);
+      } catch {
+        send({ type: 'input', data: text });
+      }
+      term.focus();
+    };
+
+    // Envoie un fichier (image glissée-déposée ou collée) au serveur, qui le
+    // stocke en temporaire et renvoie un chemin absolu. On colle ce chemin
+    // dans le PTY, comme VS Code qui insère le chemin du fichier droppé :
+    // opencode/claude/pi peut ensuite lire l'image via ce chemin.
+    const uploadFileAndInsertPath = async (file: File | Blob, fallbackName: string) => {
+      try {
+        const name = (file as File).name || fallbackName;
+        const dataBase64 = await readFileAsBase64(file);
+        const base = await getServerUrl();
+        const res = await fetch(`${base}/pty/upload`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ filename: name, dataBase64 })
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const json = (await res.json()) as { path?: string };
+        if (!json.path) throw new Error('réponse sans path');
+        pasteInput(quoteShellPath(json.path) + ' ');
+      } catch (error) {
+        const detail = error instanceof Error ? error.message : String(error);
+        console.error('[terminal] upload failed:', detail);
+        term.write(`\r\n\x1b[31m[drop/paste: upload échoué (${detail}) — redémarre le serveur (npm run dev)]\x1b[0m\r\n`);
+      } finally {
+        term.focus();
+      }
+    };
+
+    const pasteImageFromClipboard = async (): Promise<boolean> => {
+      try {
+        const clipboard = navigator.clipboard as Navigator['clipboard'] & {
+          read?: () => Promise<ClipboardItem[]>;
+        };
+        if (typeof clipboard.read !== 'function') return false;
+        const items = await clipboard.read();
+        for (const item of items) {
+          const imageType = item.types.find((t) => t.startsWith('image/'));
+          if (imageType) {
+            const blob = await item.getType(imageType);
+            const ext = imageType.split('/')[1] || 'png';
+            await uploadFileAndInsertPath(blob, `pasted-image.${ext}`);
+            return true;
+          }
+        }
+        return false;
+      } catch {
+        return false;
+      }
+    };
+
     const pasteFromClipboard = () => {
       try {
         const read = navigator.clipboard?.readText?.();
         if (read && typeof read.then === 'function') {
           read
-            .then((text) => {
-              if (text) send({ type: 'input', data: text });
-              term.focus();
+            .then(async (text) => {
+              if (text) {
+                pasteInput(text);
+              } else {
+                // Pas de texte : c'est peut-être une image (screenshot).
+                const handled = await pasteImageFromClipboard();
+                if (!handled) term.focus();
+              }
             })
-            .catch(() => term.focus());
+            .catch(async () => {
+              const handled = await pasteImageFromClipboard();
+              if (!handled) term.focus();
+            });
         } else {
           term.focus();
         }
@@ -193,6 +299,41 @@ export function InteractiveTerminal({ currentDirectory, className = '' }: Intera
     // xterm rend son DOM dans le container : on écoute sur le container
     // pour couvrir toutes les couches internes.
     container.addEventListener('contextmenu', handleContextMenu);
+
+    // Glisser-déposer style VS Code : dropper un/plusieurs fichiers insère
+    // leur chemin (quoté) dans le PTY ; dropper du texte l'envoie tel quel.
+    const handleDragOver = (event: DragEvent) => {
+      event.preventDefault();
+      event.stopPropagation();
+      container.classList.add('terminal-drop-active');
+      if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy';
+    };
+    const handleDragLeave = (event: DragEvent) => {
+      event.preventDefault();
+      container.classList.remove('terminal-drop-active');
+    };
+    const handleDrop = (event: DragEvent) => {
+      event.preventDefault();
+      event.stopPropagation();
+      container.classList.remove('terminal-drop-active');
+      const transfer = event.dataTransfer;
+      if (!transfer) return;
+      if (transfer.files && transfer.files.length > 0) {
+        // Navigateur => pas de vrai chemin disque : upload + insertion du
+        // chemin temporaire retourné par le serveur.
+        Array.from(transfer.files).forEach((file, i) => {
+          void uploadFileAndInsertPath(file, `dropped-file-${i}`);
+        });
+      } else {
+        const text =
+          transfer.getData('text/plain') || transfer.getData('text/uri-list');
+        if (text) pasteInput(text);
+        else term.focus();
+      }
+    };
+    container.addEventListener('dragover', handleDragOver);
+    container.addEventListener('dragleave', handleDragLeave);
+    container.addEventListener('drop', handleDrop);
 
     const fit = () => {
       try {
@@ -283,9 +424,17 @@ export function InteractiveTerminal({ currentDirectory, className = '' }: Intera
       disposed = true;
       if (reconnectTimer) clearTimeout(reconnectTimer);
       container.removeEventListener('contextmenu', handleContextMenu);
+      container.removeEventListener('dragover', handleDragOver);
+      container.removeEventListener('dragleave', handleDragLeave);
+      container.removeEventListener('drop', handleDrop);
       dataDisposable.dispose();
       resizeDisposable.dispose();
       resizeObserver.disconnect();
+      try {
+        imageAddon.dispose();
+      } catch {
+        /* ignore */
+      }
       if (socket && socket.readyState === WebSocket.OPEN) {
         // On envoie un kill pour que le shell côté serveur soit nettoyé.
         try {
