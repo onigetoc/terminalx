@@ -1,200 +1,120 @@
 import React, { useRef, useCallback, useState, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
 import {
-  BadgeX, FolderOpen, Plus, Minus, Maximize2, Minimize2, X, Terminal as TerminalIcon, Eraser, HelpCircle, Info, History, MonitorPlay
+  BadgeX, FolderOpen, Plus, Minus, Maximize2, Minimize2, X, Terminal as TerminalIcon, Eraser, HelpCircle, Info
 } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import TerminalSearch from './TerminalSearch';
-import { TerminalSpinner } from './TerminalSpinner';
-import { InteractiveTerminal } from './InteractiveTerminal';
+import TerminalSearch, { type TerminalSearchRef } from './TerminalSearch';
+import {
+  InteractiveTerminal,
+  type InteractiveTerminalHandle
+} from './InteractiveTerminal';
 
 interface TerminalUIProps {
-  isOpen: boolean;
   isFullscreen: boolean;
   isMinimized: boolean;
   height: number;
   isDragging: boolean;
   currentDirectory: string;
   osInfo: string;
-  history: Array<{ command: string; output: string; isLoading?: boolean }>;
-  command: string;
-  terminalRef: React.RefObject<HTMLDivElement>;
   handleMouseDown: (e: React.MouseEvent<HTMLDivElement>) => void;
   handleKillTerminal: () => void;
   setIsOpen: (val: boolean) => void;
   setIsMinimized: (val: boolean) => void;
   setIsFullscreen: (val: boolean) => void;
-  handleSubmit: (e: React.FormEvent) => void;
-  setCommand: (val: string) => void;
-  executeCommand: (cmd: string | string[], displayInTerminal?: number) => Promise<void>;
   mergedConfig: {
     fontSize: number;
     fontFamily: string;
     readOnlyMode: boolean;
     minHeight: number;
   };
-  formatCommand: (command: string) => React.ReactNode;
-  formatOutput: (output: string) => React.ReactNode;
   onFolderSelect?: () => Promise<void>;
-  observerRef: React.RefObject<MutationObserver | null>;
-  contentRef: React.RefObject<HTMLElement | null>;
-  setHistory: React.Dispatch<React.SetStateAction<Array<{ command: string; output: string; isLoading?: boolean }>>>;
-  contentKey: number;
-  setContentKey: React.Dispatch<React.SetStateAction<number>>;
-  showTimeoutDialog: boolean;
-  timeoutDialogKey: number;
-  onCancelCommand: () => void;
-  onContinueWaiting: () => void;
+  /** Incrémenté par le bouton Kill pour redémarrer la session PTY. */
+  sessionKey: number;
 }
 
+// Messages écrits directement dans le buffer xterm, sans passer par le shell.
+const HELP_TEXT = [
+  '\r\n\x1b[1;36m\x1b[1mTerminal X2 — aide\x1b[0m\r\n',
+  '\x1b[90m───────────────────────────────────────\x1b[0m\r\n',
+  '  \x1b[1mSessions Pleines Ecran\x1b[0m\r\n',
+  '    claude, opencode, vim, htop, nano, top…\r\n\r\n',
+  '  \x1b[1mRaccourcis\x1b[0m\r\n',
+  '    Ctrl+C / Cmd+C      copie la sélection (sinon envoie SIGINT)\r\n',
+  '    Ctrl+Shift+C        copie la sélection\r\n',
+  '    Ctrl+V / Cmd+V      colle le presse-papiers\r\n',
+  '    Ctrl+F              recherche dans le buffer\r\n',
+  '    Ctrl+L              efface l\'écran\r\n\r\n',
+  '  \x1b[1mFichiers\x1b[0m\r\n',
+  '    Glisse-dépose un fichier ou colle une image :\r\n',
+  '    le serveur le stocke et insère son chemin dans le shell.\r\n',
+  '    Les images inline (Sixel, IIP) sont rendues directement.\r\n\r\n',
+  '  \x1b[1mBarre d\'outils\x1b[0m\r\n',
+  '    Kill      relance une session propre\r\n',
+  '    Dossier   choisit le répertoire de travail\r\n',
+  '\x1b[90m───────────────────────────────────────\x1b[0m\r\n'
+];
+
+const ABOUT_TEXT = [
+  '\r\n\x1b[1;36m\x1b[1mTerminal X2\x1b[0m\r\n',
+  '\x1b[90m───────────────────────────────────────\x1b[0m\r\n',
+  '  \x1b[1mxterm.js\x1b[0m + \x1b[1mnode-pty\x1b[0m\r\n',
+  '  Un vrai shell dans le navigateur : les frappes\r\n',
+  '  clavier vont au pseudo-terminal, la sortie ANSI\r\n',
+  '  revient en streaming sur WebSocket (/ws/pty).\r\n\r\n',
+  '  \x1b[1mServeur\x1b[0m\r\n',
+  '  Fastify · ports 3003-3010 · CORS ouvert\r\n',
+  '  Outil de développement local, ne pas exposer.\r\n',
+  '\x1b[90m───────────────────────────────────────\x1b[0m\r\n'
+];
+
 export function TerminalUI(props: TerminalUIProps): JSX.Element {
-  const [isTerminalFocused, setIsTerminalFocused] = React.useState(false);
-  const searchRef = useRef<{ removeAllHighlights: () => void; focus: () => void } | null>(null);
+  const searchRef = useRef<TerminalSearchRef | null>(null);
+  const terminalRef = useRef<InteractiveTerminalHandle | null>(null);
   const [isSearchVisible, setIsSearchVisible] = useState(false);
-  const [interactiveMode, setInteractiveMode] = useState(false);
-  const searchInputRef = useRef<HTMLInputElement>(null);
+  const [matchCount, setMatchCount] = useState(0);
 
-  // Bascule entre le terminal "faux" (historique) et le terminal interactif
-  // (xterm.js + pseudo-terminal) qui permet de lancer claude, opencode, vim…
-  const toggleInteractiveMode = useCallback(() => {
-    setInteractiveMode(prev => !prev);
-  }, []);
-
-  // Gestion du raccourci clavier Ctrl+F pour la recherche
+  // Ctrl+F est intercepté par InteractiveTerminal (il faut le court-circuit
+  // avant que xterm n'envoie la frappe au shell). Ici on ne gère qu'Escape
+  // pour fermer la barre, y compris quand le focus est déjà dedans.
   useEffect(() => {
-    const handleKeyDown = (e: Event) => {
-      const keyboardEvent = e as KeyboardEvent;
-      
-      // Vérifier uniquement si le conteneur du terminal a le focus via son tabindex
-      const terminalContainer = document.querySelector('.terminal-container');
-      const hasTerminalFocus = terminalContainer?.getAttribute('tabindex') === '0' && isTerminalFocused;
-
-      // Si le terminal n'a pas le focus, on n'active ni la recherche ni le raccourci
-      if (!hasTerminalFocus) return;
-
-      // Activer la recherche et focuser l'input si on utilise Ctrl+F
-      if (keyboardEvent.ctrlKey && !keyboardEvent.altKey && !keyboardEvent.shiftKey && keyboardEvent.key === 'f') {
-        keyboardEvent.preventDefault();
-        keyboardEvent.stopPropagation();
-        setIsSearchVisible(true);
-        setTimeout(() => {
-          searchRef.current?.focus();
-        }, 0);
-        return;
-      }
-
-      // Basculer le mode interactif (terminal PTY) avec Ctrl+Alt+I.
-      // ⚠️ On n'utilise pas Ctrl+Shift+I : c'est le raccourci DevTools des
-      // navigateurs, qui n'est pas interceptable par la page.
-      if (keyboardEvent.ctrlKey && keyboardEvent.altKey && !keyboardEvent.metaKey && !keyboardEvent.shiftKey) {
-        const key = keyboardEvent.key.toLowerCase();
-        if (key === 'i') {
-          keyboardEvent.preventDefault();
-          keyboardEvent.stopPropagation();
-          toggleInteractiveMode();
-        }
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isSearchVisible) {
+        e.preventDefault();
+        e.stopPropagation();
+        setIsSearchVisible(false);
       }
     };
 
-    // Attacher l'événement au niveau du document pour capturer les raccourcis
-    document.addEventListener('keydown', handleKeyDown as EventListener);
-    return () => document.removeEventListener('keydown', handleKeyDown as EventListener);
-  }, [isTerminalFocused, toggleInteractiveMode]);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [isSearchVisible]);
 
-  // Améliorons également les gestionnaires de focus/blur
-  const handleFocus = useCallback(() => {
-    // console.log('Terminal focused');
-    setIsTerminalFocused(true);
+  // Ouverture via Ctrl+F (raccourci intercepté dans <InteractiveTerminal>).
+  const openSearch = useCallback(() => {
+    setIsSearchVisible(true);
   }, []);
 
-  const handleBlur = useCallback((e: React.FocusEvent) => {
-    const relatedTarget = e.relatedTarget as HTMLElement | null;
-    
-    // Ne pas perdre le focus si on passe à l'input de recherche
-    if (relatedTarget?.closest('.search-container')) {
-      return;
-    }
-    
-    if (!e.currentTarget.contains(relatedTarget)) {
-      setIsTerminalFocused(false);
-    }
+  const handleCloseSearch = useCallback(() => {
+    setIsSearchVisible(false);
+    setMatchCount(0);
+    // Le focus repart dans le terminal, sinon les frappes suivantes
+    // n'atteignent plus le shell.
+    terminalRef.current?.focus();
   }, []);
-
-  // Gestionnaire pour l'input du terminal
-  const handleTerminalInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    // Vérifier que l'événement vient de l'input du terminal et que la recherche n'est pas visible
-    if (e.currentTarget.classList.contains('terminal-command-input') && !isSearchVisible) {
-      if (e.key === 'Enter') {
-        e.preventDefault(); // Empêcher le comportement par défaut
-        e.stopPropagation(); // Empêcher la propagation vers d'autres gestionnaires
-        props.handleSubmit(e);
-        
-        // Force le scroll en bas après l'exécution de la commande
-        setTimeout(() => {
-          if (props.terminalRef.current) {
-            props.terminalRef.current.scrollTop = props.terminalRef.current.scrollHeight;
-          }
-        }, 0);
-      }
-    }
-  };
 
   const tooltipStyle = "bg-[#252526] text-[#d4d4d4] border border-[#333] shadow-md";
 
-  const getPromptSymbol = (os: string) => {
-    switch (os.toLowerCase()) {
-      case 'macos':
-        return '%';
-      case 'linux':
-        return '$';
-      case 'windows':
-      default:
-        return '>';
-    }
-  };
-
-  const promptSymbol = getPromptSymbol(props.osInfo);
-
-  if (!props.isOpen) {
-    return (
-      <Button
-        className="fixed bottom-4 right-4 bg-[#1e1e1e] text-white floating-button h-9 w-9"
-        onClick={() => props.setIsOpen(true)}
-      >
-        <TerminalIcon className="w-4 h-4 lucide" />
-      </Button>
-    );
-  }
+  const handleClose = useCallback(() => {
+    props.setIsOpen(false);
+  }, [props.setIsOpen]);
 
   const terminalClasses = `fixed bg-[#1e1e1e] text-[#d4d4d4] border-t border-[#333] shadow-lg transition-all duration-200 ${
     props.isFullscreen ? 'top-0 left-0 right-0 bottom-0 z-50' : 'bottom-0 left-0 right-0'
   }`;
 
-  // Déplacer handleClearHistory avant son utilisation
-  const handleClearHistory = useCallback(() => {
-    searchRef.current?.removeAllHighlights?.();
-    props.setHistory([]);
-    props.setContentKey(prev => prev + 1);
-  }, [props.setHistory, props.setContentKey]);
-
-  // Mettre à jour le gestionnaire de fermeture de recherche
-  const handleCloseSearch = useCallback(() => {
-    setIsSearchVisible(false);
-    searchRef.current?.removeAllHighlights?.();
-  }, []);
-
-  // Simplifier handleClose
-  const handleClose = useCallback(() => {
-    props.setIsOpen(false);
-  }, [props.setIsOpen]);
-
   return (
-    <div
-      className={`terminal-container ${terminalClasses}`}
-      tabIndex={isTerminalFocused ? 0 : -1}
-      onFocus={handleFocus}
-      onBlur={handleBlur}
-    >
+    <div className={`terminal-container ${terminalClasses}`}>
       <div
         className="terminal-window"
         style={{
@@ -228,7 +148,7 @@ export function TerminalUI(props: TerminalUIProps): JSX.Element {
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent side="top" className={tooltipStyle}>
-                    <p>Kill Terminal</p>
+                    <p>Kill session (restart)</p>
                   </TooltipContent>
                 </Tooltip>
 
@@ -245,27 +165,6 @@ export function TerminalUI(props: TerminalUIProps): JSX.Element {
                   </TooltipTrigger>
                   <TooltipContent side="top" className={tooltipStyle}>
                     <p>Select Working Directory</p>
-                  </TooltipContent>
-                </Tooltip>
-
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      data-active={interactiveMode}
-                      className="interactive-mode-button bg-transparent border-none hover:bg-[#333] text-[#d4d4d4] hover:text-[#fff] h-6 w-6 transition-colors"
-                      onClick={toggleInteractiveMode}
-                    >
-                      <MonitorPlay className="h-4 w-4 lucide" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent side="top" className={tooltipStyle}>
-                    <p>
-                      {interactiveMode
-                        ? 'Quitter le terminal interactif'
-                        : 'Terminal interactif (Claude/OpenCode)'}
-                    </p>
                   </TooltipContent>
                 </Tooltip>
 
@@ -307,7 +206,7 @@ export function TerminalUI(props: TerminalUIProps): JSX.Element {
                       variant="ghost"
                       size="icon"
                       className="bg-transparent border-none hover:bg-[#333] text-[#d4d4d4] hover:text-[#fff] h-6 w-6 transition-colors"
-                      onClick={handleClose} // Utiliser handleClose ici
+                      onClick={handleClose}
                     >
                       <X className="h-4 w-4 lucide" />
                     </Button>
@@ -329,148 +228,75 @@ export function TerminalUI(props: TerminalUIProps): JSX.Element {
         )}
 
         {!props.isMinimized && (
-          <div
-            className="terminal-content-wrapper"
-            key={interactiveMode ? `interactive-${props.contentKey}` : props.contentKey}
-          >
-            {interactiveMode ? (
-              <InteractiveTerminal
-                currentDirectory={props.currentDirectory}
-                className="interactive-terminal"
-              />
-            ) : (
-            <>
+          <div className="terminal-content-wrapper relative">
             <TerminalSearch
               ref={searchRef}
               isVisible={isSearchVisible}
-              onClose={handleCloseSearch}  // Utiliser handleCloseSearch au lieu de setIsSearchVisible
-              terminalRef={props.terminalRef}
-              history={props.history}
+              onClose={handleCloseSearch}
+              terminalRef={terminalRef}
+              matchCount={matchCount}
             />
-            <div 
-              ref={el => {
-                // Use mutable ref callback pattern
-                const element = el as HTMLElement;
-                if (props.terminalRef) {
-                  (props.terminalRef as { current: HTMLElement | null }).current = element;
-                }
-                if (props.contentRef) {
-                  (props.contentRef as { current: HTMLElement | null }).current = element;
-                }
-              }}
-              className="terminal-scrollbar bg-stone-900 overflow-y-auto p-4 relative" 
-              style={{ height: 'calc(100% - 80px)' }}
-            >
-              {props.history.map((entry, index) => (
-                <div key={index} className="terminal-line mb-2">
-                  <div className="terminal-prompt-line flex items-center">
-                    <span className="terminal-prompt mr-2">{promptSymbol}</span>
-                    {props.formatCommand(entry.command)}
-                  </div>
-                  <div className="terminal-output-line ml-4 text-left">
-                    {entry.isLoading ? (
-                      <TerminalSpinner command={entry.command} />
-                    ) : (
-                      props.formatOutput(entry.output)
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            {props.showTimeoutDialog && (
-              <div className="terminal-timeout-dialog" key={props.timeoutDialogKey}>
-                <div className="terminal-timeout-message">
-                  Command is taking longer than expected. Continue waiting?
-                </div>
-                <div className="terminal-timeout-buttons">
-                  <button
-                    className="terminal-button terminal-button-red"
-                    onClick={props.onCancelCommand}
-                  >
-                    Cancel Command
-                  </button>
-                  <button
-                    className="terminal-button terminal-button-blue"
-                    onClick={props.onContinueWaiting}
-                  >
-                    Continue Waiting
-                  </button>
-                </div>
-              </div>
-            )}
+            <InteractiveTerminal
+              key={props.sessionKey}
+              ref={terminalRef}
+              currentDirectory={props.currentDirectory}
+              onMatchCount={setMatchCount}
+              onSearchRequest={openSearch}
+              className="interactive-terminal"
+            />
 
             {!props.mergedConfig.readOnlyMode && (
-              <form onSubmit={props.handleSubmit} className="terminal-input-area flex items-center gap-2 p-2 border-t border-[#333]">
-                <div className="flex-1 flex items-center">
-                  <span className="terminal-prompt mr-2">{promptSymbol}</span>
-                  <input
-                    type="text"
-                    value={props.command}
-                    onChange={(e) => props.setCommand(e.target.value)}
-                    onKeyDown={handleTerminalInputKeyDown}
-                    className="terminal-command-input flex-1 bg-transparent border-none outline-none text-[#d4d4d4] font-mono"
-                    placeholder="Type a command..."
-                    autoFocus
-                  />
-                </div>
-                <div className="flex space-x-2 flex-shrink-0">
-                  <TooltipProvider delayDuration={50}>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 bg-[#1e1e1e] hover:bg-[#333] text-[#d4d4d4] hover:text-[#fff] transition-colors"
-                          onClick={handleClearHistory}
-                        >
-                          <Eraser className="h-4 w-4 lucide" />
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent side="top" className={tooltipStyle}>
-                        <p>Clear Terminal</p>
-                      </TooltipContent>
-                    </Tooltip>
+              <div className="terminal-footer flex items-center justify-end gap-2 p-1.5 pl-2 pr-2 bg-[#252526] border-t border-[#333]">
+                <TooltipProvider delayDuration={50}>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="bg-transparent border-none hover:bg-[#333] text-[#d4d4d4] hover:text-[#fff] h-6 w-6 transition-colors"
+                        onClick={() => terminalRef.current?.clear()}
+                      >
+                        <Eraser className="h-4 w-4 lucide" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent side="top" className={tooltipStyle}>
+                      <p>Clear Terminal</p>
+                    </TooltipContent>
+                  </Tooltip>
 
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 bg-zinc-800 hover:bg-[#333] text-[#d4d4d4] hover:text-[#fff] transition-colors"
-                          onClick={() => props.executeCommand('help')}
-                        >
-                          <HelpCircle className="h-4 w-4 lucide" />
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent className={tooltipStyle}>
-                        <p>Help</p>
-                      </TooltipContent>
-                    </Tooltip>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="bg-transparent border-none hover:bg-[#333] text-[#d4d4d4] hover:text-[#fff] h-6 w-6 transition-colors"
+                        onClick={() => terminalRef.current?.write(HELP_TEXT.join(''))}
+                      >
+                        <HelpCircle className="h-4 w-4 lucide" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent side="top" className={tooltipStyle}>
+                      <p>Help</p>
+                    </TooltipContent>
+                  </Tooltip>
 
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 bg-zinc-800 hover:bg-[#333] text-[#d4d4d4] hover:text-[#fff] transition-colors"
-                          onClick={() => props.executeCommand('about')}
-                        >
-                          <Info className="h-4 w-4 lucide" />
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent className={tooltipStyle}>
-                        <p>About</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                </div>
-              </form>
-            )}
-            </>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="bg-transparent border-none hover:bg-[#333] text-[#d4d4d4] hover:text-[#fff] h-6 w-6 transition-colors"
+                        onClick={() => terminalRef.current?.write(ABOUT_TEXT.join(''))}
+                      >
+                        <Info className="h-4 w-4 lucide" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent side="top" className={tooltipStyle}>
+                      <p>About</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </div>
             )}
           </div>
         )}

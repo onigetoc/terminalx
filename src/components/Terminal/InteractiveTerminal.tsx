@@ -1,32 +1,81 @@
-import { useEffect, useRef } from 'react';
+import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
 import { Terminal as XTerm } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { ImageAddon } from '@xterm/addon-image';
+import { SearchAddon, type ISearchOptions } from '@xterm/addon-search';
 import '@xterm/xterm/css/xterm.css';
 import { getServerUrl } from './config/serverConfig';
 import { terminalConfig } from './config/terminalConfig';
 import './styles/terminal.css';
 
-interface InteractiveTerminalProps {
+export interface InteractiveTerminalProps {
   /** Répertoire de départ de la session interactive. */
   currentDirectory?: string;
   className?: string;
+  /** Notifie le parent du nombre d'occurrences trouvées par la recherche. */
+  onMatchCount?: (count: number) => void;
+  /**
+   * Le parent demande l'ouverture de la recherche (Ctrl+F). Il faut le
+   * capacitor ici : sur un écouteur `document` en phase bubble, xterm a déjà
+   * envoyé la frappe au shell et le terminal affiche `^F`.
+   */
+  onSearchRequest?: () => void;
 }
+
+/**
+ * Surface exposée au parent : tout ce que la toolbar de la fenêtre (effacer,
+ * help, about, recherche) doit pouvoir faire sur la session xterm.
+ */
+export interface InteractiveTerminalHandle {
+  /** Vide le buffer (bouton Clear). */
+  clear: () => void;
+  /** Écrit un message localement, sans passer par le shell. */
+  write: (data: string) => void;
+  focus: () => void;
+  /** Cherche l'occurrence suivante (1) ou précédente (-1) dans le buffer. */
+  search: (term: string, direction: 1 | -1) => void;
+  /** Retire les surlignages de recherche. */
+  clearSearch: () => void;
+}
+
+// Largeur de la barre de défilement, et donc de la zone réservée à droite de
+// l'écran. xterm 6 dessine sa propre barre (`.xterm-scrollable-element >
+// .scrollbar`, style VS Code) et la rend en overlay : elle ne pousse pas le
+// contenu, c'est le FitAddon qui retranche cette largeur en calculant les
+// colonnes. 10px au lieu du 14px par défaut, le terminal est souvent étroit et
+// la bande finale grignotait la dernière colonne.
+const SCROLLBAR_WIDTH = 10;
+
+// Surlignages alignés sur le thème du terminal (comme VS Code) : gris pour les
+// occurrences, ambre pour celle qui est active.
+const SEARCH_OPTIONS: ISearchOptions = {
+  incremental: true,
+  decorations: {
+    matchBackground: '#3a3d41',
+    matchOverviewRuler: '#3a3d41',
+    activeMatchBackground: '#b8860b',
+    activeMatchColorOverviewRuler: '#b8860b'
+  }
+};
 
 /**
  * Terminal interactif basé sur xterm.js + un pseudo-terminal côté serveur.
  *
- * Contrairement au terminal "faux" (liste d'historique), ce composant rend la
- * sortie ANSI en temps réel et renvoie les frappes clavier au shell, ce qui
- * permet de faire tourner des CLIs plein écran comme `claude`, `opencode`,
- * `vim`, `htop`, `nano`, etc.
+ * Ce composant rend la sortie ANSI en temps réel et renvoie les frappes
+ * clavier au shell, ce qui permet de faire tourner des CLIs plein écran
+ * comme `claude`, `opencode`, `vim`, `htop`, `nano`, etc.
  */
-export function InteractiveTerminal({ currentDirectory, className = '' }: InteractiveTerminalProps): JSX.Element {
+export const InteractiveTerminal = forwardRef<InteractiveTerminalHandle, InteractiveTerminalProps>(
+  function InteractiveTerminal({ currentDirectory, className = '', onMatchCount, onSearchRequest }, ref) {
   const containerRef = useRef<HTMLDivElement>(null);
   // On garde la valeur à jour dans une ref pour être utilisée à l'ouverture
   // de la WebSocket sans dépendance d'effet (et sans avertissement ESLint).
   const cwdRef = useRef(currentDirectory);
   cwdRef.current = currentDirectory;
+  // Instance xterm exposée au parent (clear/write/search) : elle n'existe
+  // qu'après le montage, d'où la ref objet.
+  const termRef = useRef<XTerm | null>(null);
+  const searchRef = useRef<SearchAddon | null>(null);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -41,6 +90,13 @@ export function InteractiveTerminal({ currentDirectory, className = '' }: Intera
       fontSize: cfg.fontSize || 14,
       scrollback: cfg.scrollbackLimit || 1000,
       allowProposedApi: true,
+      // Largeur de la zone réservée à droite de l'écran pour la barre de
+      // défilement. C'est le SEUL réglage qui garde la barre et la place
+      // calculée par le FitAddon synchronisées : le viewport lit
+      // `options.overviewRuler.width` pour dimensionner sa barre, et le
+      // FitAddon soustrait exactement cette même valeur. Sans elle, les deux
+      // retombent sur 14 et le texte passe sous la barre.
+      overviewRuler: { width: SCROLLBAR_WIDTH },
       theme: {
         background: '#1e1e1e',
         foreground: '#d4d4d4',
@@ -62,12 +118,30 @@ export function InteractiveTerminal({ currentDirectory, className = '' }: Intera
         brightBlue: '#3b8eea',
         brightMagenta: '#d670d6',
         brightCyan: '#29b8db',
-        brightWhite: '#ffffff'
+        brightWhite: '#ffffff',
+        // Barre de défilement : mêmes teintes que le thème VS Code.
+        scrollbarSliderBackground: '#424242',
+        scrollbarSliderHoverBackground: '#4f4f4f',
+        scrollbarSliderActiveBackground: '#6b6b6b'
       }
     });
 
+    termRef.current = term;
+
     const fitAddon = new FitAddon();
     term.loadAddon(fitAddon);
+
+    // Recherche dans le buffer (remplace l'ancienne recherche DOM qui ne
+    // pouvait cibler que l'historique en texte du terminal simulé).
+    const searchAddon = new SearchAddon();
+    searchRef.current = searchAddon;
+    term.loadAddon(searchAddon);
+    // `onDidChangeResults` n'est émis qu'avec les decorations activées, et
+    // `resultIndex` vaut -1 quand le nombre de correspondances dépasse la
+    // limite de surlignage : on ne compte que dans ce cas.
+    const resultsDisposable = searchAddon.onDidChangeResults(({ resultIndex, resultCount }) => {
+      onMatchCount?.(resultIndex === -1 ? 0 : resultCount);
+    });
     // Affichage d'images inline (Sixel + protocole iTerm IIP), comme le
     // terminal intégré de VS Code : les outils CLI (opencode, etc.) qui
     // émettent ces séquences voient leurs images rendues sur un canvas.
@@ -250,6 +324,17 @@ export function InteractiveTerminal({ currentDirectory, className = '' }: Intera
       const key = event.key.toLowerCase();
       const ctrlOrMeta = event.ctrlKey || event.metaKey;
 
+      // Recherche : Ctrl+F / Cmd+F ouvre la barre de recherche xterm.
+      // OnCourt-circuite ici (et pas sur `document`) pour que la frappe
+      // n'atteigne jamais le shell — sinon le terminal affiche `^F`.
+      // Ctrl+Shift+F reste envoyé au shell (usage unix : reverse search).
+      if (ctrlOrMeta && !event.altKey && !event.shiftKey && key === 'f') {
+        event.preventDefault();
+        event.stopPropagation();
+        onSearchRequest?.();
+        return false;
+      }
+
       // Copie : Ctrl+C / Cmd+C uniquement si du texte est sélectionné.
       // Sans sélection on retourne true pour envoyer ^C (SIGINT) au shell.
       if (ctrlOrMeta && !event.altKey && key === 'c' && !event.shiftKey) {
@@ -430,6 +515,8 @@ export function InteractiveTerminal({ currentDirectory, className = '' }: Intera
 
     return () => {
       disposed = true;
+      termRef.current = null;
+      searchRef.current = null;
       if (reconnectTimer) clearTimeout(reconnectTimer);
       container.removeEventListener('contextmenu', handleContextMenu);
       container.removeEventListener('dragover', handleDragOver);
@@ -437,6 +524,7 @@ export function InteractiveTerminal({ currentDirectory, className = '' }: Intera
       container.removeEventListener('drop', handleDrop);
       dataDisposable.dispose();
       resizeDisposable.dispose();
+      resultsDisposable.dispose();
       resizeObserver.disconnect();
       try {
         imageAddon.dispose();
@@ -461,7 +549,23 @@ export function InteractiveTerminal({ currentDirectory, className = '' }: Intera
     };
   }, []);
 
+  useImperativeHandle(ref, () => ({
+    clear: () => termRef.current?.clear(),
+    write: (data: string) => termRef.current?.write(data),
+    focus: () => termRef.current?.focus(),
+    search: (searchTerm: string, direction: 1 | -1) => {
+      const addon = searchRef.current;
+      if (!addon || !searchTerm) return;
+      if (direction === -1) {
+        addon.findPrevious(searchTerm, SEARCH_OPTIONS);
+      } else {
+        addon.findNext(searchTerm, SEARCH_OPTIONS);
+      }
+    },
+    clearSearch: () => searchRef.current?.clearDecorations()
+  }), []);
+
   return <div ref={containerRef} className={className || 'interactive-terminal'} />;
-}
+});
 
 export default InteractiveTerminal;

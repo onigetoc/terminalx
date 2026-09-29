@@ -8,116 +8,10 @@
 .search-container {
   border: 1px solid #333;
   border-radius: 6px;
-  background-color: #1e1e1e;
   background: transparent;
-  /* min-width: 600px; */
   transition: opacity 0.2s ease-in-out;
+  z-index: 50;
 }
-
-.search-container.invisible {
-  pointer-events: none;
-}
-
-.search-container.visible {
-  pointer-events: auto;
-}
-
-.search-container input {
-  flex: 1;
-  border: 1px solid #404040;
-  color: #d1d5db;
-}
-
-/* Terminal command styles */
-.terminal-line {
-  position: relative;
-}
-
-.terminal-prompt-line {
-  display: flex;
-  align-items: center;
-}
-
-.terminal-command {
-  flex: 1;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem; /* Ajoute un espacement uniforme entre les éléments */
-  color: #d4d4d4;
-  white-space: pre-wrap; /* Changed from pre to pre-wrap to handle word wrapping better */
-  word-break: break-word; /* Added to handle long commands better */
-}
-
-.terminal-command .text-gray-400 {
-  color: rgba(156, 163, 175, 0.9); /* Un gris plus clair et plus visible */
-}
-
-.terminal-command .text-yellow-300 {
-  color: #fde047;
-}
-
-.terminal-output-line {
-  position: relative;
-  padding: 4px 8px;
-  border-radius: 2px;
-  outline: none;
-}
-
-.terminal-output-line pre {
-  margin: 0;
-  text-align: left;
-  white-space: pre-wrap;
-  font-family: inherit;
-}
-
-.terminal-output {
-  position: relative;
-}
-
-.terminal-output pre {
-  white-space: pre-wrap;
-  word-wrap: break-word;
-  font-family: inherit;
-  margin: 0;
-  padding: 0;
-  tab-size: 4;
-}
-
-/* ANSI Colors */
-.ansi-black-fg { color: #000000; }
-.ansi-red-fg { color: #cd3131; }
-.ansi-green-fg { color: #0dbc79; }
-.ansi-yellow-fg { color: #e5e510; }
-.ansi-blue-fg { color: #3b8eea; }
-.ansi-magenta-fg { color: #ce51ce; }
-.ansi-cyan-fg { color: #11a8cd; }
-.ansi-white-fg { color: #e5e5e5; }
-.ansi-bright-black-fg { color: #666666; }
-.ansi-bright-red-fg { color: #f14c4c; }
-.ansi-bright-green-fg { color: #23d18b; }
-.ansi-bright-yellow-fg { color: #f5f543; }
-.ansi-bright-blue-fg { color: #3b8eea; }
-.ansi-bright-magenta-fg { color: #d670d6; }
-.ansi-bright-cyan-fg { color: #29b8db; }
-.ansi-bright-white-fg { color: #ffffff; }
-
-/* ANSI Backgrounds */
-.ansi-black-bg { background-color: #000000; }
-.ansi-red-bg { background-color: #cd3131; }
-.ansi-green-bg { background-color: #0dbc79; }
-.ansi-yellow-bg { background-color: #e5e510; }
-.ansi-blue-bg { background-color: #2472c8; }
-.ansi-magenta-bg { background-color: #bc3fbc; }
-.ansi-cyan-bg { background-color: #11a8cd; }
-.ansi-white-bg { background-color: #e5e5e5; }
-.ansi-bright-black-bg { background-color: #666666; }
-.ansi-bright-red-bg { background-color: #f14c4c; }
-.ansi-bright-green-bg { background-color: #23d18b; }
-.ansi-bright-yellow-bg { background-color: #f5f543; }
-.ansi-bright-blue-bg { background-color: #3b8eea; }
-.ansi-bright-magenta-bg { background-color: #d670d6; }
-.ansi-bright-cyan-bg { background-color: #29b8db; }
-.ansi-bright-white-bg { background-color: #ffffff; }
 
 .search-container input {
   flex: 1;
@@ -127,7 +21,6 @@
   border-radius: 2px;
   outline: none;
   font-size: 12px;
-  /* min-width: 200px; */
 }
 
 .search-container input:focus {
@@ -138,60 +31,6 @@
   color: #666;
 }
 
-.search-counter {
-  color: #d1d5db;
-  font-size: 0.875rem;
-  padding: 0 0.5rem;
-}
-
-.search-button {
-  background-color: transparent;
-  border: none;
-  color: #d1d5db;
-  padding: 4px;
-  border-radius: 2px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.search-button:hover {
-  background-color: #2a2d2e;
-  color: #fff;
-}
-
-.search-button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-/* Styles pour les surlignages de recherche */
-.terminal-search-highlight {
-  background-color: rgba(255, 255, 0, 0.2);
-  border-radius: 2px;
-  color: #d1d5db;
-}
-
-.terminal-search-current {
-  background-color: rgba(255, 165, 0, 0.4);
-  border-radius: 2px;
-  outline: 1px solid rgba(255, 200, 0, 0.8);
-}
-
-.search-highlight {
-  background-color: rgba(255, 255, 255, 0.2);
-  border-radius: 2px;
-}
-
-.search-highlight.current {
-  /* background-color: #ffa500; */
-  /* color: black; */
-  background-color: rgba(255, 165, 0, 0.4);
-  border-radius: 2px;
-  outline: 1px solid rgba(255, 200, 0, 0.8);
-}
-
 /* Ensure the terminal window has relative positioning */
 .terminal-window {
   position: relative;
@@ -199,48 +38,6 @@
   flex-direction: column;
   height: 100%;
   overflow: hidden;
-}
-
-/* Terminal scrollable content area */
-.terminal-scrollbar {
-  flex: 1;
-  overflow-y: auto;
-  padding: 1rem;
-  min-height: 0; /* Important for proper flex behavior */
-}
-
-/* Terminal scrollbar styling */
-.terminal-scrollbar::-webkit-scrollbar {
-  width: 10px;
-}
-
-.terminal-scrollbar::-webkit-scrollbar-track {
-  background: #1e1e1e;
-}
-
-.terminal-scrollbar::-webkit-scrollbar-thumb {
-  background: #424242;
-  border-radius: 5px;
-}
-
-.terminal-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: #4f4f4f;
-}
-
-/* Firefox */
-.terminal-scrollbar {
-  scrollbar-width: thin;
-  scrollbar-color: #424242 #1e1e1e;
-}
-
-/* Terminal input area */
-.terminal-input-area {
-  flex-shrink: 0; /* Prevent input area from shrinking */
-  width: 100%;
-  background-color: #1e1e1e;
-  border-top: 1px solid #333;
-  padding: 0.5rem;
-  font-size: 14px;
 }
 
 /* Terminal content wrapper */
@@ -262,90 +59,6 @@
   box-shadow: 0 0 0 2px rgba(62, 166, 255, 0.1);
 }
 
-/* Existing terminal styles */
-.terminal-prompt {
-  color: #519768;
-  font-weight: 500;
-}
-
-.terminal-link {
-  color: #3b8eea;
-  text-decoration: none;
-  cursor: pointer;
-}
-
-.terminal-link:hover {
-  text-decoration: underline;
-}
-
-.terminal-open-button {
-  border-radius: 0.5rem !important;
-}
-
-.terminal-timeout-dialog {
-  position: absolute;
-  bottom: 60px; /* Ajusté pour être au-dessus de la zone de saisie */
-  left: 50%;
-  transform: translateX(-50%);
-  background-color: #1e1e1e;
-  border: 1px solid #404040;
-  border-radius: 6px;
-  padding: 12px;
-  color: #ffffff;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
-  width: 90%;
-  max-width: 400px;
-  z-index: 1000;
-  animation: fadeIn 0.2s ease-in-out;
-}
-
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-    transform: translate(-50%, 10px);
-  }
-  to {
-    opacity: 1;
-    transform: translate(-50%, 0);
-  }
-}
-
-.terminal-timeout-message {
-  margin-bottom: 12px;
-  font-size: 14px;
-}
-
-.terminal-timeout-buttons {
-  display: flex;
-  gap: 8px;
-  justify-content: flex-end;
-}
-
-.terminal-button {
-  padding: 6px 12px;
-  border: none;
-  border-radius: 4px;
-  font-size: 12px;
-  cursor: pointer;
-  transition: background-color 0.2s;
-}
-
-.terminal-button-red {
-  background-color: #dc2626;
-}
-
-.terminal-button-red:hover {
-  background-color: #b91c1c;
-}
-
-.terminal-button-blue {
-  background-color: #2563eb;
-}
-
-.terminal-button-blue:hover {
-  background-color: #1d4ed8;
-}
-
 /* Terminal interactif (xterm.js + PTY) */
 .interactive-terminal {
   flex: 1;
@@ -359,6 +72,7 @@
   height: 100%;
 }
 
+/* Fond du viewport : xterm.css le force en noir pur, on aligne sur le thème. */
 .interactive-terminal .xterm-viewport {
   background-color: #1e1e1e !important;
 }
@@ -374,40 +88,9 @@
   background-color: rgba(14, 99, 156, 0.12);
 }
 
-/* Bouton du mode interactif */
-.interactive-mode-button[data-active='true'] {
-  background-color: #0e639c !important;
-  color: #ffffff !important;
-}
-
-/* Spinner style CLI (pattern Gemini) */
-.terminal-spinner {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  color: #9ca3af;
-  font-family: inherit;
-  white-space: nowrap;
-}
-
-/* Frame braille du spinner */
-.terminal-spinner-frame {
-  display: inline-block;
-  color: #569cd6; /* Bleu VS Code, cohérent avec le thème du terminal */
-  font-weight: 700;
-  font-size: 1.05em;
-  min-width: 12px;
-  text-align: center;
-}
-
-/* Texte de statut */
-.terminal-spinner-status {
-  color: #d4d4d4;
-}
-
-/* Barre de progression indéterminée style CLI */
-.terminal-spinner-bar {
-  color: #6a9955; /* Vert commentaire VS Code */
-  letter-spacing: 1px;
-  user-select: none;
+/* Barre d'actions sous le terminal (clear / help / about) */
+.terminal-footer {
+  flex-shrink: 0;
+  background-color: #252526;
+  border-top: 1px solid #333;
 }

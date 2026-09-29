@@ -9,15 +9,12 @@ import {
 } from "@/components/ui/tooltip";
 import '@/components/Terminal/styles/terminal.css';
 import { TerminalUI } from './TerminalUI';
-import { TerminalConfig, defaultConfig, terminalConfig } from '@/components/Terminal/config/terminalConfig'; // Ajout de terminalConfig ici
-import { setTerminalExecutor } from '@/components/Terminal/utils/terminalUtils';
-import { translateCommand } from '@/components/Terminal/utils/commandOS';
-import { isCustomCommand, executeCustomCommand } from './services/customCommands';
-import { executeCommandOnServer, CommandResult } from './services/terminalApi';
-import { formatCommand, formatTextWithLinks, FormattedOutput } from './services/terminalFormatter';
-import { initializeDirectory, updateStoredDirectory } from './utils/directoryUtils';
-import { createCommandWithTimeout, CommandTimeoutError } from './services/commandTimeout';
-import { abortChildProcess } from './utils/abortKill';
+import { TerminalConfig, defaultConfig, terminalConfig } from '@/components/Terminal/config/terminalConfig';
+import {
+  initializeDirectory,
+  setWorkingDirectory,
+  updateStoredDirectory
+} from './utils/directoryUtils';
 
 interface TerminalProps {
   config?: Partial<TerminalConfig>;
@@ -38,162 +35,10 @@ const Terminal: React.FC<TerminalProps> = ({ config = {} }) => {
   const [isDragging, setIsDragging] = useState(false);
   const [currentDirectory, setCurrentDirectory] = useState('');
   const [osInfo, setOsInfo] = useState('');
-  const [history, setHistory] = useState<Array<{ command: string; output: string; isLoading?: boolean }>>([]);
-  const [command, setCommand] = useState('');
-  const [contentKey, setContentKey] = useState(0);
-  const [isExecuting, setIsExecuting] = useState(false);
-  const [showTimeoutDialog, setShowTimeoutDialog] = useState(false);
-  const [currentTimeoutCommand, setCurrentTimeoutCommand] = useState<{ cancel: () => void } | null>(null);
-
-  const terminalRef = useRef<HTMLDivElement>(null);
-  const observerRef = useRef<MutationObserver | null>(null);
-  const contentRef = useRef<HTMLElement | null>(null);
-  const commandQueue = useRef<{command: string; displayInTerminal: number}[]>([]);
-
-  const scrollToBottom = useCallback(() => {
-    if (terminalRef.current) {
-      terminalRef.current.scrollTop = terminalRef.current.scrollHeight;
-    }
-  }, []);
-
-
-  const processCommand = useCallback(async (command: string, displayInTerminal: number) => {
-    console.log('🚀 Executing command:', command);
-    
-    if (displayInTerminal) {
-      setHistory(prev => [...prev, { command, output: '', isLoading: true }]);
-    }
-    
-    let timeoutId: NodeJS.Timeout | undefined;
-    let result: CommandResult;
-    const controller = new AbortController();
-    const { signal } = controller;
-    
-    try {
-      const trimmedCommand = command.trim().toLowerCase();
-
-      if (trimmedCommand === 'clear' || trimmedCommand === 'cls') {
-        setHistory([]);
-        setCommand('');
-        setContentKey(prev => prev + 1);
-        return;
-      }
-
-      const commandPromise = new Promise<CommandResult>(async (resolve, reject) => {
-        timeoutId = setTimeout(() => {
-          setShowTimeoutDialog(true);
-          setCurrentTimeoutCommand({ cancel: () => {
-            controller.abort();
-            console.log('Command aborted');
-            setHistory(prev => {
-              const newHistory = [...prev];
-              const lastIndex = newHistory.length - 1;
-              newHistory[lastIndex] = {
-                command,
-                output: 'Command aborted.',
-                isLoading: false
-              };
-              return newHistory;
-            });
-          }});
-        }, 5000);
-
-        try {
-          if (isCustomCommand(command)) {
-            result = await executeCustomCommand(command);
-            console.log('📝 Custom command result:', result);
-            
-            if ('executeOnServer' in result && result.executeOnServer && 'command' in result) {
-              const translatedCommand = translateCommand(result.command as string);
-              console.log('🔄 Translated command:', translatedCommand);
-              result = await executeCommandOnServer(translatedCommand);
-            }
-          } else {
-            const translatedCommand = translateCommand(command);
-            console.log('🔄 Translated command:', translatedCommand);
-            result = await executeCommandOnServer(translatedCommand);
-          }
-          console.log('✅ Command response:', result);
-          clearTimeout(timeoutId);
-          resolve(result);
-        } catch (error) {
-          console.error('❌ Command error:', error);
-          clearTimeout(timeoutId);
-          reject(error);
-        }
-      });
-
-      result = await commandPromise;
-
-      // Update directory state and storage when cd command succeeds
-      if (result.currentDirectory) {
-        const trimmedCmd = command.trim().toLowerCase();
-        if (trimmedCmd === 'cd' || trimmedCmd === 'cd..' || trimmedCmd.startsWith('cd ')) {
-          updateStoredDirectory(result.currentDirectory);
-        }
-        setCurrentDirectory(result.currentDirectory);
-      }
-
-      if (displayInTerminal) {
-        setHistory(prev => {
-          const newHistory = [...prev];
-          const lastIndex = newHistory.length - 1;
-          newHistory[lastIndex] = {
-            command,
-            output: result.output,
-            isLoading: false
-          };
-          return newHistory;
-        });
-        setTimeout(scrollToBottom, 0);
-      }
-    } catch (error: unknown) {
-      clearTimeout(timeoutId);
-      if (displayInTerminal) {
-        setHistory(prev => {
-          const newHistory = [...prev];
-          const lastIndex = newHistory.length - 1;
-          newHistory[lastIndex] = {
-            command,
-            output: `Error executing command: ${error instanceof Error ? error.message : 'Unknown error occurred'}`,
-            isLoading: false
-          };
-          return newHistory;
-        });
-      }
-    }
-  }, [scrollToBottom, setCommand, setContentKey, setCurrentDirectory, setHistory]);
-
-  const processNextCommand = useCallback(async () => {
-    if (isExecuting || commandQueue.current.length === 0) return;
-  
-    setIsExecuting(true);
-    const { command, displayInTerminal } = commandQueue.current[0];
-    
-    try {
-      await processCommand(command, displayInTerminal);
-    } finally {
-      commandQueue.current.shift();
-      setIsExecuting(false);
-      
-      // Process next command if there are any in queue
-      if (commandQueue.current.length > 0) {
-        setTimeout(processNextCommand, 0);
-      }
-    }
-  }, [isExecuting, processCommand]);
-  
-  const executeCommand = useCallback(async (cmd: string | string[], displayInTerminal: number = 1) => {
-    const commands = Array.isArray(cmd) ? cmd : [cmd];
-    
-    // Add commands to queue
-    commands.forEach(command => {
-      commandQueue.current.push({ command, displayInTerminal });
-    });
-    
-    // Start processing queue if not already processing
-    processNextCommand();
-  }, [processNextCommand]);
+  // Incrémenté par le bouton Kill : le remontage de <InteractiveTerminal>
+  // tue la WebSocket (kill du shell) et en ouvre une nouvelle, donc une
+  // session PTY neuve.
+  const [sessionKey, setSessionKey] = useState(0);
 
   useEffect(() => {
     const detectOS = () => {
@@ -204,32 +49,20 @@ const Terminal: React.FC<TerminalProps> = ({ config = {} }) => {
       return 'Unknown OS';
     };
 
-    const os = detectOS();
-    setOsInfo(os);
+    setOsInfo(detectOS());
 
-    // Initialiser le répertoire en utilisant directoryUtils
-    const initDir = async () => {
-      try {
-        const dir = await initializeDirectory();
-        setCurrentDirectory(dir);
-      } catch (error) {
+    initializeDirectory()
+      .then(setCurrentDirectory)
+      .catch((error) => {
         console.error('Failed to initialize directory:', error);
-      }
-    };
-
-    initDir();
+      });
   }, []);
-
-  useEffect(() => {
-    setTerminalExecutor(executeCommand);
-    return () => setTerminalExecutor(null);
-  }, [executeCommand]);
 
   // Modifier l'effet pour initialiser l'état isVisible avec la valeur de terminalConfig
   useEffect(() => {
     const handleVisibilityChange = () => {
-      const config = terminalConfig.get();
-      setIsVisible(config.showTerminal);
+      const current = terminalConfig.get();
+      setIsVisible(current.showTerminal);
     };
 
     // Initialiser l'état avec la valeur actuelle
@@ -237,34 +70,24 @@ const Terminal: React.FC<TerminalProps> = ({ config = {} }) => {
 
     // S'abonner aux changements de configuration
     window.addEventListener('terminal-visibility-change', handleVisibilityChange);
-    
+
     return () => {
       window.removeEventListener('terminal-visibility-change', handleVisibilityChange);
     };
   }, []);
 
-  // Initialize terminal controls at startup
+  // Make handleToggleTerminal available globally
   useEffect(() => {
-    // Initialize executeCommand
-    setTerminalExecutor(executeCommand);
-
-    // Make handleToggleTerminal available globally for backward compatibility
     if (typeof window !== 'undefined') {
       window.handleToggleTerminal = handleToggleTerminal;
     }
 
     return () => {
-      setTerminalExecutor(null);
       if (typeof window !== 'undefined') {
         window.handleToggleTerminal = undefined;
       }
     };
-  }, [executeCommand]);
-
-  // Scroll to bottom when history changes
-  useEffect(() => {
-    scrollToBottom();
-  }, [history, scrollToBottom]);
+  }, []);
 
   const handleMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     if (!isFullscreen) {
@@ -289,162 +112,79 @@ const Terminal: React.FC<TerminalProps> = ({ config = {} }) => {
     }
   }, [height, isFullscreen, mergedConfig.minHeight]);
 
-  const handleSubmit = useCallback((e: React.FormEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    
-    if (command.trim()) {
-      const nativeEvent = e.nativeEvent;
-      if (nativeEvent instanceof Event) {
-        nativeEvent.stopImmediatePropagation();
-      }
-      
-      executeCommand(command);
-      setCommand('');
-      
-      setTimeout(() => {
-        if (terminalRef.current) {
-          terminalRef.current.scrollTop = terminalRef.current.scrollHeight;
-        }
-      }, 100);
-    }
-  }, [command, executeCommand]);
-
+  // Relance une session PTY propre (le shell courant est tué).
   const handleKillTerminal = useCallback(() => {
-    setHistory([]);
-    setCommand('');
-    setContentKey(prev => prev + 1);
+    setSessionKey(prev => prev + 1);
   }, []);
 
   const handleClose = useCallback(() => {
     setIsOpen(false);
   }, []);
 
-  const formatCommandWithHighlight = useCallback((command: string): React.ReactNode => {
-    return formatCommand(command);
-  }, []);
-
-  const formatOutput = useCallback((output: string): JSX.Element => {
-    if (!output.trim()) {
-      return <></>;
-    }
-    return (
-      <div className="terminal-output-line">
-        <FormattedOutput text={output} executeCommand={executeCommand} />
-      </div>
-    );
-  }, [executeCommand]);
-
   const onFolderSelect = useCallback(async () => {
     if (!('showDirectoryPicker' in window)) {
-      setHistory(prev => [...prev, {
-        command: '',
-        output: 'Your browser does not support directory selection. Please use a modern browser like Chrome or Edge.',
-        isLoading: false
-      }]);
+      console.warn('Directory selection is not supported in this browser.');
       return;
     }
 
     try {
       const directoryHandle = await window.showDirectoryPicker();
-      const folderPath = directoryHandle.name;
-      
-      // Exécuter la commande cd et attendre la réponse
-      await executeCommand(`cd ${folderPath}`);
-      
-      // Le chemin sera mis à jour automatiquement par executeCommand 
-      // seulement si la commande réussit
-      
+      // Le dossier choisi devient le cwd des prochaines sessions PTY. Le
+      // navigateur ne donne que le nom du dossier (pas son chemin absolu), donc
+      // on demande au serveur de s'y positionner.
+      const directory = await setWorkingDirectory(directoryHandle.name);
+      setCurrentDirectory(directory);
+      updateStoredDirectory(directory);
+      // Le shell déjà lancé garde son propre cwd : on redémarre la session
+      // pour qu'il démarre dans le nouveau dossier.
+      setSessionKey(prev => prev + 1);
     } catch (error: unknown) {
       if (error instanceof Error && error.name !== 'AbortError') {
-        setHistory(prev => [...prev, {
-          command: '',
-          output: `Error selecting directory: ${error.message}`,
-          isLoading: false
-        }]);
+        console.error('Error selecting directory:', error);
       }
     }
-  }, [executeCommand]);
+  }, []);
 
-  const handleCancelCommand = useCallback(() => {
-    if (currentTimeoutCommand) {
-      currentTimeoutCommand.cancel();
-      setShowTimeoutDialog(false);
-      console.log('Command aborted.');
-      setHistory(prev => {
-        const newHistory = [...prev];
-        const lastIndex = newHistory.length - 1;
-        newHistory[lastIndex] = {
-          ...newHistory[lastIndex],
-          output: 'Command aborted.',
-          isLoading: false
-        };
-        return newHistory;
-      });
-    }
-    // Clear the command queue and reset the isExecuting state
-    commandQueue.current = [];
-    setIsExecuting(false);
-  }, [currentTimeoutCommand]);
-
-  // Modifier la condition de rendu pour utiliser CSS au lieu de null
   return (
     <div className={`${!isVisible ? 'hidden' : ''}`}>
-        {!isOpen ? (
-          <TooltipProvider>
-            <Tooltip delayDuration={100}>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="default"
-                  className="fixed bottom-4 right-4 px-2.5 bg-[#1e1e1e] text-white floating-button rounded-[8px]"
-                  onClick={() => {
-                    setIsOpen(true);
-                  }}
-                >
-                  <TerminalIcon className="w-4 h-4 lucide" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>Open Terminal</p>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-        ) : (
-          <TerminalUI
-            isOpen={isOpen}
-            isFullscreen={isFullscreen}
-            isMinimized={isMinimized}
-            height={height}
-            isDragging={isDragging}
-            currentDirectory={currentDirectory}
-            osInfo={osInfo}
-            history={history}
-            command={command}
-            terminalRef={terminalRef}
-            handleMouseDown={handleMouseDown}
-            handleKillTerminal={handleKillTerminal}
-            setIsOpen={handleClose}
-            setIsMinimized={setIsMinimized}
-            setIsFullscreen={setIsFullscreen}
-            handleSubmit={handleSubmit}
-            setCommand={setCommand}
-            executeCommand={executeCommand}
-            mergedConfig={mergedConfig}
-            formatCommand={formatCommandWithHighlight}
-            formatOutput={formatOutput}
-            onFolderSelect={onFolderSelect}
-            observerRef={observerRef}
-            contentRef={contentRef}
-            setHistory={setHistory}
-            contentKey={contentKey}
-            setContentKey={setContentKey}
-            showTimeoutDialog={showTimeoutDialog}
-            timeoutDialogKey={contentKey}
-            onCancelCommand={handleCancelCommand}
-            onContinueWaiting={() => setShowTimeoutDialog(false)}
-          />
-        )}
-      </div>
+      {!isOpen ? (
+        <TooltipProvider>
+          <Tooltip delayDuration={100}>
+            <TooltipTrigger asChild>
+              <Button
+                variant="default"
+                className="fixed bottom-4 right-4 px-2.5 bg-[#1e1e1e] text-white floating-button rounded-[8px]"
+                onClick={() => {
+                  setIsOpen(true);
+                }}
+              >
+                <TerminalIcon className="w-4 h-4 lucide" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>Open Terminal</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      ) : (
+        <TerminalUI
+          isFullscreen={isFullscreen}
+          isMinimized={isMinimized}
+          height={height}
+          isDragging={isDragging}
+          currentDirectory={currentDirectory}
+          osInfo={osInfo}
+          handleMouseDown={handleMouseDown}
+          handleKillTerminal={handleKillTerminal}
+          setIsOpen={handleClose}
+          setIsMinimized={setIsMinimized}
+          setIsFullscreen={setIsFullscreen}
+          mergedConfig={mergedConfig}
+          onFolderSelect={onFolderSelect}
+          sessionKey={sessionKey}
+        />
+      )}
+    </div>
   );
 };
 

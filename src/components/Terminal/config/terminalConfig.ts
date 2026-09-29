@@ -5,14 +5,9 @@ export type TerminalConfig = {
   defaultHeight: number;
   minHeight: number;
   minWidth: number;
-  showExecutedCommands: boolean;
-  keepCommandHistory: boolean;
-  maxHistoryLength: number;
-  theme: 'dark' | 'light' | 'system';
   fontSize: number;
   fontFamily: string;
-  showPath: boolean;
-  maxOutputLength: number;
+  /** Lignes conservées dans le scrollback xterm. */
   scrollbackLimit: number;
   startMinimized: boolean;
   showFloatingButton: boolean;
@@ -30,14 +25,8 @@ export const defaultConfig: TerminalConfig = {
   defaultHeight: 340,
   minHeight: 200,
   minWidth: 300,
-  showExecutedCommands: true,
-  keepCommandHistory: true,
-  maxHistoryLength: 100,
-  theme: 'dark',
   fontSize: 14,
   fontFamily: 'monospace',
-  showPath: true,
-  maxOutputLength: 1000,
   scrollbackLimit: 1000,
 };
 

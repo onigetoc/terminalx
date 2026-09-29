@@ -65,3 +65,5 @@ lerna-debug.log*
 
 # Typescript
 *.tsbuildinfo
+.agents
+rules

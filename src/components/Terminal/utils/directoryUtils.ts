@@ -1,5 +1,8 @@
 import { getServerUrl } from '../config/serverConfig';
 
+/** Clé localStorage du dernier dossier de travail choisi. */
+const STORED_DIRECTORY_KEY = 'terminalDirectory';
+
 /**
  * Normalise un chemin en remplaçant les backslashes par des forward slashes.
  */
@@ -8,9 +11,37 @@ export function formatPath(path: string): string {
 }
 
 /**
- * Gets the current directory from the server
+ * Demande au serveur de se positionner dans `directory` et renvoie le chemin
+ * réellement retenu (le serveur peut refuser un dossier inexistant).
  */
-export async function getCurrentDirectory(): Promise<string> {
+export async function setWorkingDirectory(directory: string): Promise<string> {
+  const API_URL = await getServerUrl();
+  const response = await fetch(`${API_URL}/init-directory`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ directory })
+  });
+  if (!response.ok) throw new Error('Failed to initialize directory');
+  const data = await response.json();
+  return formatPath(data.currentDirectory);
+}
+
+/**
+ * Répertoire de travail de la session PTY.
+ * 1. Le dossier mémorisé dans localStorage, s'il existe encore.
+ * 2. Sinon, le répertoire courant du serveur.
+ */
+export async function initializeDirectory(): Promise<string> {
+  const storedDirectory = localStorage.getItem(STORED_DIRECTORY_KEY);
+  if (storedDirectory) {
+    try {
+      return await setWorkingDirectory(storedDirectory);
+    } catch (error) {
+      // Dossier supprimé ou serveur indisponible : on repart du défaut.
+      console.warn('Stored directory is no longer reachable, falling back:', error);
+    }
+  }
+
   try {
     const API_URL = await getServerUrl();
     const response = await fetch(`${API_URL}/current-directory`);
@@ -19,54 +50,17 @@ export async function getCurrentDirectory(): Promise<string> {
     return formatPath(data.currentDirectory);
   } catch (error) {
     console.warn('Failed to get current directory, using fallback:', error);
-    return formatPath('C:/Users/LENOVO');
+    return '';
   }
 }
 
 /**
- * Initializes the terminal directory
- * 1. First tries to use stored directory if available
- * 2. Otherwise uses server's current directory
- */
-export async function initializeDirectory(): Promise<string> {
-  try {
-    // 1. Check localStorage first
-    const storedDirectory = localStorage.getItem('terminalDirectory');
-    
-    if (storedDirectory) {
-      try {
-        const API_URL = await getServerUrl();
-        const response = await fetch(`${API_URL}/init-directory`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ directory: storedDirectory })
-        });
-        
-        if (response.ok) {
-          const data = await response.json();
-          return formatPath(data.currentDirectory);
-        }
-      } catch (error) {
-        console.error('Failed to initialize stored directory:', error);
-      }
-    }
-
-    // 2. Fall back to server's current directory
-    return await getCurrentDirectory();
-    
-  } catch (error) {
-    console.error('Directory initialization error:', error);
-    // Use default Windows path as last resort
-    return formatPath('C:/Users/LENOVO');
-  }
-}
-
-/**
- * Updates the stored directory when cd command is used
+ * Mémorise le dossier de travail pour les prochaines sessions.
  */
 export function updateStoredDirectory(newDirectory: string): void {
+  if (!newDirectory) return;
   try {
-    localStorage.setItem('terminalDirectory', formatPath(newDirectory));
+    localStorage.setItem(STORED_DIRECTORY_KEY, formatPath(newDirectory));
   } catch (error) {
     console.error('Failed to update stored directory:', error);
   }

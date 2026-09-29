@@ -1,6 +1,6 @@
 import fastify, { FastifyRequest } from 'fastify';
 import cors from '@fastify/cors';
-import { executeCommand, getCurrentDirectory, initializeDirectory } from './commandService';
+import { getCurrentDirectory, initializeDirectory } from './directoryService';
 import { attachPtyServer } from './ptyServer';
 import { SERVER_CONFIG } from '../config/serverConfig';
 import net from 'net';
@@ -64,17 +64,6 @@ async function startServer() {
     // Health check route
     app.get('/health', async () => {
       return { status: 'ok' };
-    });
-
-    // Execute command route
-    app.post('/execute', async (request: FastifyRequest<{
-      Body: { command: string }
-    }>) => {
-      const { command } = request.body;
-      if (!command || typeof command !== 'string') {
-        throw new Error('Invalid command');
-      }
-      return executeCommand(command);
     });
 
     // Initialize directory endpoint

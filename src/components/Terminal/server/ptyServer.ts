@@ -1,7 +1,7 @@
 import { WebSocketServer, WebSocket, type RawData } from 'ws';
 import type { Server as HttpServer } from 'http';
 import * as pty from 'node-pty';
-import { getCurrentDirectory } from './commandService';
+import { getCurrentDirectory } from './directoryService';
 
 /**
  * Serveur de pseudo-terminal (PTY) pour les CLIs interactives
