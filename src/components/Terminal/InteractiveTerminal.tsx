@@ -239,6 +239,14 @@ export function InteractiveTerminal({ currentDirectory, className = '' }: Intera
     };
 
     term.attachCustomKeyEventHandler((event: KeyboardEvent) => {
+      // ⚠️ xterm appelle ce handler sur 'keydown', 'keyup' ET 'keypress'
+      // (CoreBrowserTerminal._keyDown/_keyUp/_keyPress). Sans ce filtre,
+      // Ctrl+V collerait deux fois : une au keydown, une au keyup (au
+      // relâchement de la touche, ctrlKey est toujours vrai et key === 'v').
+      // On n'agit donc que sur le keydown ; les autres événements laissent
+      // xterm faire son traitement normal.
+      if (event.type !== 'keydown') return true;
+
       const key = event.key.toLowerCase();
       const ctrlOrMeta = event.ctrlKey || event.metaKey;
 
