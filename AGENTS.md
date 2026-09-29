@@ -104,3 +104,7 @@ Additional project-specific rules live here — read them before coding:
 
 - [`rules/coding-standards.md`](rules/coding-standards.md)
 - [`rules/karpathy-guidelines.md`](rules/karpathy-guidelines.md)
+
+Use caveman skill.
+
+

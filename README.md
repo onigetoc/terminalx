@@ -1,4 +1,4 @@
-# Terminal X2
+# TerminalX
 
 A real terminal in the browser: **xterm.js** renders the screen, **node-pty** runs a shell on a
 small Node server, and a WebSocket streams both directions. Full-screen CLIs (`claude`,
