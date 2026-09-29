@@ -4,7 +4,7 @@ const Index = () => {
   return (
     <div className="min-h-screen bg-background">
       <div className="container mx-auto p-4">
-        <h1 className="text-4xl font-bold mb-4">Terminal Demo</h1>
+        <h1 className="text-4xl font-bold mb-4">TerminalX Demo</h1>
         <p className="text-lg text-muted-foreground mb-4">
           A real shell in the browser: xterm.js renders the screen, node-pty runs
           the shell on the server, and a WebSocket streams both ways. Click the

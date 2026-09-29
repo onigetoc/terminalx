@@ -67,3 +67,5 @@ lerna-debug.log*
 *.tsbuildinfo
 .agents
 rules
+# Playwright CLI output (may contain credentials)
+.playwright-cli/

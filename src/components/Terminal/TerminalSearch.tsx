@@ -15,6 +15,8 @@ interface TerminalSearchProps {
   terminalRef: React.RefObject<InteractiveTerminalHandle | null>;
   /** Occurrences trouvées, remontées par `@xterm/addon-search`. */
   matchCount: number;
+  /** Terme initial (sélection xterm au moment du Ctrl+F). */
+  initialTerm?: string;
 }
 
 /**
@@ -24,7 +26,7 @@ interface TerminalSearchProps {
  * ce composant ne gère que l'UI et l'affichage du compteur.
  */
 const TerminalSearch = forwardRef<TerminalSearchRef, TerminalSearchProps>(
-  ({ isVisible, onClose, terminalRef, matchCount }, ref) => {
+  ({ isVisible, onClose, terminalRef, matchCount, initialTerm }, ref) => {
     const [searchText, setSearchText] = useState('');
     const searchInputRef = useRef<HTMLInputElement>(null);
 
@@ -42,9 +44,13 @@ const TerminalSearch = forwardRef<TerminalSearchRef, TerminalSearchProps>(
         terminalRef.current?.clearSearch();
         return;
       }
+      // Pré-remplissage par la sélection : l'input affiche le terme, le focus
+      // le sélectionne pour qu'une frappe le remplace. La recherche a déjà été
+      // déclenchée par le parent.
+      setSearchText(initialTerm ?? '');
       searchInputRef.current?.focus();
       searchInputRef.current?.select();
-    }, [isVisible, terminalRef]);
+    }, [isVisible, terminalRef, initialTerm]);
 
     const runSearch = (text: string) => {
       setSearchText(text);
@@ -83,7 +89,7 @@ const TerminalSearch = forwardRef<TerminalSearchRef, TerminalSearchProps>(
 
     return (
       <div
-        className="search-container absolute right-2 top-2 bg-[#252526] border border-[#383838] flex items-center p-2 shadow-lg z-50"
+        className="search-container absolute right-[21px] top-2 bg-[#252526] border border-[#383838] flex items-center p-2 shadow-lg z-50"
         onClick={(e) => e.stopPropagation()}
       >
         <Search className="w-4 h-4 text-gray-400 lucide mr-2" />

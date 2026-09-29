@@ -72,9 +72,21 @@
   height: 100%;
 }
 
-/* Fond du viewport : xterm.css le force en noir pur, on aligne sur le thème. */
+/* Viewport xterm.
+ *
+ * xterm.css force `overflow-y: scroll`, donc Windows dessine en permanence la
+ * barre native avec ses boutons fléchés, même quand le contenu tient. On ne
+ * garde que le défilement à la molette : la barre est masquée, le scrollbar
+ * reste fonctionnel. */
 .interactive-terminal .xterm-viewport {
   background-color: #1e1e1e !important;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.interactive-terminal .xterm-viewport::-webkit-scrollbar {
+  width: 0;
+  height: 0;
 }
 
 .interactive-terminal .xterm-screen {

@@ -36,15 +36,9 @@ export interface InteractiveTerminalHandle {
   search: (term: string, direction: 1 | -1) => void;
   /** Retire les surlignages de recherche. */
   clearSearch: () => void;
+  /** Texte actuellement sélectionné, à pré-remplir dans la barre de recherche. */
+  getSelection: () => string;
 }
-
-// Largeur de la barre de défilement, et donc de la zone réservée à droite de
-// l'écran. xterm 6 dessine sa propre barre (`.xterm-scrollable-element >
-// .scrollbar`, style VS Code) et la rend en overlay : elle ne pousse pas le
-// contenu, c'est le FitAddon qui retranche cette largeur en calculant les
-// colonnes. 10px au lieu du 14px par défaut, le terminal est souvent étroit et
-// la bande finale grignotait la dernière colonne.
-const SCROLLBAR_WIDTH = 10;
 
 // Surlignages alignés sur le thème du terminal (comme VS Code) : gris pour les
 // occurrences, ambre pour celle qui est active.
@@ -90,13 +84,6 @@ export const InteractiveTerminal = forwardRef<InteractiveTerminalHandle, Interac
       fontSize: cfg.fontSize || 14,
       scrollback: cfg.scrollbackLimit || 1000,
       allowProposedApi: true,
-      // Largeur de la zone réservée à droite de l'écran pour la barre de
-      // défilement. C'est le SEUL réglage qui garde la barre et la place
-      // calculée par le FitAddon synchronisées : le viewport lit
-      // `options.overviewRuler.width` pour dimensionner sa barre, et le
-      // FitAddon soustrait exactement cette même valeur. Sans elle, les deux
-      // retombent sur 14 et le texte passe sous la barre.
-      overviewRuler: { width: SCROLLBAR_WIDTH },
       theme: {
         background: '#1e1e1e',
         foreground: '#d4d4d4',
@@ -118,11 +105,7 @@ export const InteractiveTerminal = forwardRef<InteractiveTerminalHandle, Interac
         brightBlue: '#3b8eea',
         brightMagenta: '#d670d6',
         brightCyan: '#29b8db',
-        brightWhite: '#ffffff',
-        // Barre de défilement : mêmes teintes que le thème VS Code.
-        scrollbarSliderBackground: '#424242',
-        scrollbarSliderHoverBackground: '#4f4f4f',
-        scrollbarSliderActiveBackground: '#6b6b6b'
+        brightWhite: '#ffffff'
       }
     });
 
@@ -562,7 +545,8 @@ export const InteractiveTerminal = forwardRef<InteractiveTerminalHandle, Interac
         addon.findNext(searchTerm, SEARCH_OPTIONS);
       }
     },
-    clearSearch: () => searchRef.current?.clearDecorations()
+    clearSearch: () => searchRef.current?.clearDecorations(),
+    getSelection: () => termRef.current?.getSelection() ?? ''
   }), []);
 
   return <div ref={containerRef} className={className || 'interactive-terminal'} />;

@@ -1,7 +1,7 @@
 import React, { useRef, useCallback, useState, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
 import {
-  BadgeX, FolderOpen, Plus, Minus, Maximize2, Minimize2, X, Terminal as TerminalIcon, Eraser, HelpCircle, Info
+  BadgeX, FolderOpen, Plus, Minus, Maximize, Minimize, X, Terminal as TerminalIcon, Eraser, HelpCircle, Info
 } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import TerminalSearch, { type TerminalSearchRef } from './TerminalSearch';
@@ -73,6 +73,8 @@ export function TerminalUI(props: TerminalUIProps): JSX.Element {
   const terminalRef = useRef<InteractiveTerminalHandle | null>(null);
   const [isSearchVisible, setIsSearchVisible] = useState(false);
   const [matchCount, setMatchCount] = useState(0);
+  // Terme fourni à l'ouverture (sélection xterm), consommé par <TerminalSearch>.
+  const [initialSearchText, setInitialSearchText] = useState('');
 
   // Ctrl+F est intercepté par InteractiveTerminal (il faut le court-circuit
   // avant que xterm n'envoie la frappe au shell). Ici on ne gère qu'Escape
@@ -91,7 +93,16 @@ export function TerminalUI(props: TerminalUIProps): JSX.Element {
   }, [isSearchVisible]);
 
   // Ouverture via Ctrl+F (raccourci intercepté dans <InteractiveTerminal>).
+  // Une sélection active pré-remplit l'input et lance la recherche dessus,
+  // comme dans VS Code.
   const openSearch = useCallback(() => {
+    const selected = terminalRef.current?.getSelection() ?? '';
+    if (selected) {
+      setInitialSearchText(selected);
+      terminalRef.current?.search(selected, 1);
+    } else {
+      setInitialSearchText('');
+    }
     setIsSearchVisible(true);
   }, []);
 
@@ -192,7 +203,7 @@ export function TerminalUI(props: TerminalUIProps): JSX.Element {
                       className="bg-transparent border-none hover:bg-[#333] text-[#d4d4d4] hover:text-[#fff] h-6 w-6 transition-colors"
                       onClick={() => props.setIsFullscreen(!props.isFullscreen)}
                     >
-                      {props.isFullscreen ? <Minimize2 className="h-4 w-4 lucide" /> : <Maximize2 className="h-4 w-4 lucide" />}
+                      {props.isFullscreen ? <Minimize className="h-4 w-4 lucide" /> : <Maximize className="h-4 w-4 lucide" />}
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent side="top" className={tooltipStyle}>
@@ -235,6 +246,7 @@ export function TerminalUI(props: TerminalUIProps): JSX.Element {
               onClose={handleCloseSearch}
               terminalRef={terminalRef}
               matchCount={matchCount}
+              initialTerm={initialSearchText}
             />
             <InteractiveTerminal
               key={props.sessionKey}
