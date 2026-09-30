@@ -41,6 +41,8 @@ interface TerminalUIProps {
   onCloseSession: (id: string) => void;
   /** Un processus a démarré (titre) ou s'est arrêté (null = nom du shell). */
   onSessionTitle: (id: string, title: string | null) => void;
+  /** Répertoire courant réel d'une session (spawn ou `cd`). */
+  onSessionDirectory: (id: string, directory: string) => void;
   /** Relance la session active avec un shell neuf. */
   handleKillTerminal: () => void;
   setIsOpen: (val: boolean) => void;
@@ -111,6 +113,7 @@ export function TerminalUI(props: TerminalUIProps): JSX.Element {
   const { activeSessionId, sessions } = props;
   const activeSession = sessions.find((s) => s.id === activeSessionId);
   const activeTitle = activeSession?.title ?? BRAND_TITLE;
+  const activeDirectory = activeSession?.cwd || props.currentDirectory;
   const activeMatchCount = matchCounts[activeSessionId] ?? 0;
 
   // Ref "courante" : un objet getter mémoïsé, pour ne pas donner une nouvelle
@@ -153,6 +156,13 @@ export function TerminalUI(props: TerminalUIProps): JSX.Element {
       props.onSessionTitle(id, title);
     },
     [props.onSessionTitle]
+  );
+
+  const handleDirectoryChange = useCallback(
+    (id: string) => (directory: string) => {
+      props.onSessionDirectory(id, directory);
+    },
+    [props.onSessionDirectory]
   );
 
   // Ouverture via Ctrl+F (raccourci intercepté dans <InteractiveTerminal>).
@@ -330,10 +340,11 @@ export function TerminalUI(props: TerminalUIProps): JSX.Element {
                   }}
                   shell={session.shell}
                   visible={isActive}
-                  currentDirectory={props.currentDirectory}
+                  currentDirectory={session.cwd || props.currentDirectory}
                   onMatchCount={handleMatchCount(session.id)}
                   onSearchRequest={openSearch}
                   onTitleChange={handleTitleChange(session.id)}
+                  onDirectoryChange={handleDirectoryChange(session.id)}
                   // Les sessions inactives restent montées mais masquées : le
                   // PTY, le buffer et le défilement survivent au changement.
                   className={isActive ? 'interactive-terminal' : 'interactive-terminal hidden'}
@@ -354,9 +365,13 @@ export function TerminalUI(props: TerminalUIProps): JSX.Element {
 
         {!props.mergedConfig.readOnlyMode && (
           <div className="terminal-footer flex items-center justify-between gap-4 p-1.5 pl-2 pr-2 bg-[#252526] border-t border-[#333]">
-            {/* OS de l'utilisateur à gauche. Le répertoire courant n'est plus
-                affiché ici : on le voit directement dans le prompt du shell. */}
-            <div className="min-w-0 truncate text-xs text-gray-400">User OS: {props.osInfo}</div>
+            {/* OS de l'utilisateur puis répertoire courant de la session
+                active, à gauche. */}
+            <div className="min-w-0 truncate text-xs text-gray-400">
+              User OS: {props.osInfo}
+              <span className="mx-2 text-gray-600">|</span>
+              Current directory: {activeDirectory || 'Loading...'}
+            </div>
             <div className="flex shrink-0 items-center gap-2">
               <TooltipProvider delayDuration={50}>
               <Tooltip>

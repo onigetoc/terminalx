@@ -152,10 +152,11 @@ const Terminal: React.FC<TerminalProps> = ({ config = {} }) => {
   }, [activeSessionId]);
 
   // Relance toutes les sessions : utilisé quand le répertoire de travail change,
-  // car le cwd d'un shell est figé à son lancement.
+  // car le cwd d'un shell est figé à son lancement. On oublie aussi le cwd suivi
+  // de chaque session pour que le nouveau shell reparte du dossier choisi.
   const restartAllSessions = useCallback(() => {
     setSessions((prev) =>
-      prev.map((session) => ({ ...session, restartKey: session.restartKey + 1 }))
+      prev.map((session) => ({ ...session, restartKey: session.restartKey + 1, cwd: undefined }))
     );
   }, []);
 
@@ -181,6 +182,15 @@ const Terminal: React.FC<TerminalProps> = ({ config = {} }) => {
 
   const handleSelectSession = useCallback((id: string) => {
     setActiveSessionId(id);
+  }, []);
+
+  // Répertoire courant réel d'une session (spawn ou `cd`), pour le pied de page.
+  const handleSessionDirectory = useCallback((id: string, directory: string) => {
+    setSessions((prev) =>
+      prev.map((session) =>
+        session.id === id && session.cwd !== directory ? { ...session, cwd: directory } : session
+      )
+    );
   }, []);
 
   // Fermer une session démonte son <InteractiveTerminal>, ce qui envoie `kill`
@@ -264,6 +274,7 @@ const Terminal: React.FC<TerminalProps> = ({ config = {} }) => {
           onCreateSession={handleCreateSession}
           onCloseSession={handleCloseSession}
           onSessionTitle={handleSessionTitle}
+          onSessionDirectory={handleSessionDirectory}
           handleKillTerminal={handleKillTerminal}
           setIsOpen={handleClose}
           setIsMinimized={setIsMinimized}

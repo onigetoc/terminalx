@@ -6,6 +6,7 @@ import { SearchAddon, type ISearchOptions } from '@xterm/addon-search';
 import '@xterm/xterm/css/xterm.css';
 import { getServerUrl } from './config/serverConfig';
 import { terminalConfig } from './config/terminalConfig';
+import { resolveDirectoryCommand, formatPath } from './utils/directoryUtils';
 import './styles/terminal.css';
 
 export type ShellKind = 'default' | 'powershell' | 'cmd' | 'bash' | 'zsh';
@@ -22,6 +23,8 @@ export interface InteractiveTerminalProps {
    * fait revenir au nom du shell.
    */
   onTitleChange?: (title: string | null) => void;
+  /** Rappelé quand le répertoire courant de la session change (`cd`, spawn). */
+  onDirectoryChange?: (directory: string) => void;
   /**
    * false = session en arrière-plan. Le composant reste monté (le PTY, le
    * buffer et le défilement survivent) mais son conteneur est masqué par le
@@ -85,7 +88,8 @@ export const InteractiveTerminal = forwardRef<InteractiveTerminalHandle, Interac
       visible = true,
       onMatchCount,
       onSearchRequest,
-      onTitleChange
+      onTitleChange,
+      onDirectoryChange
     },
     ref
   ) {
@@ -102,6 +106,9 @@ export const InteractiveTerminal = forwardRef<InteractiveTerminalHandle, Interac
   // Lu à chaque frappe, sans redéclencher d'effet.
   const onTitleChangeRef = useRef(onTitleChange);
   onTitleChangeRef.current = onTitleChange;
+  // Lu à chaque frappe, sans redéclencher d'effet.
+  const onDirectoryChangeRef = useRef(onDirectoryChange);
+  onDirectoryChangeRef.current = onDirectoryChange;
   // Instance xterm exposée au parent (clear/write/search) : elle n'existe
   // qu'après le montage, d'où la ref objet.
   const termRef = useRef<XTerm | null>(null);
@@ -483,7 +490,7 @@ export const InteractiveTerminal = forwardRef<InteractiveTerminalHandle, Interac
 
           socket.onmessage = (event) => {
             if (disposed) return;
-            let msg: { type: string; data?: string; message?: string; code?: number; running?: boolean };
+            let msg: { type: string; data?: string; message?: string; code?: number; running?: boolean; cwd?: string };
             try {
               msg = JSON.parse(String(event.data));
             } catch {
@@ -496,6 +503,10 @@ export const InteractiveTerminal = forwardRef<InteractiveTerminalHandle, Interac
                 break;
               case 'ready':
                 fit();
+                // Répertoire réel du shell qui vient d'être lancé : c'est la
+                // source de vérité, elle corrige un éventuel décalage avec le
+                // dossier par défaut du serveur.
+                if (msg.cwd) onDirectoryChangeRef.current?.(formatPath(msg.cwd));
                 // Une session peut être ouverte en arrière-plan (le menu « + »
                 // crée la nouvelle session déjà active, mais un `ready` peut
                 // arriver après un changement) : ne voler le focus que si on
@@ -539,50 +550,63 @@ export const InteractiveTerminal = forwardRef<InteractiveTerminalHandle, Interac
         });
     };
 
-    // Nom de la session : le shell par défaut, puis le nom du processus tant
-    // qu'une commande est en cours.
-    //
     // Le nom vient du *signal de vie* renvoyé par le serveur (un processus
     // enfant du shell existe-t-il ?), pas du texte tapé : c'est exactement le
-    // critère de VS Code. La ligne tapée ne sert qu'à fournir le libellé, et
-    // seulement si c'est un mot isolé — `opencode`, `pi`, `claude` renommeront,
-    // `npm install` ou `git status` non. Sans ce filtre, une commande longue
-    // ferait clignoter le nom pendant qu'elle tourne.
+    // critère de VS Code. Seules les commandes qui lancent un vrai processus
+    // renomment la session (`claude`, `codex`, `pi`, `bun run dev`…), les
+    // builtins comme `echo` ou `help` non — ils ne spawnent aucun enfant. Le
+    // libellé est le premier mot de la ligne (`bun run dev` => `bun`).
     let lineBuffer = '';
     let pendingCommand: string | null = null;
     let running = false;
     const syncTitle = () => {
-      if (running && pendingCommand && !/\s/.test(pendingCommand)) {
+      if (running && pendingCommand) {
         onTitleChangeRef.current?.(pendingCommand);
       } else if (!running) {
         onTitleChangeRef.current?.(null);
       }
     };
-    const trackTitle = (data: string) => {
-      if (data === '\r' || data === '\n') {
-        const command = lineBuffer.replace(/\s+/g, ' ').trim();
-        lineBuffer = '';
-        if (command) {
-          // On demande au serveur de regarder. `syncTitle` est rappelé par la
-          // réponse `running`, donc inutile de l'appeler ici.
-          pendingCommand = command;
-          send({ type: 'watch' });
+    const trackTitle = (input: string) => {
+      // `onData` peut livrer plusieurs caractères d'un coup (collage — parfois
+      // enveloppé par le bracketed paste `\x1b[200~ … \x1b[201~`). On retire les
+      // séquences d'échappement puis on traite caractère par caractère, comme
+      // une frappe au clavier.
+      const cleaned = input
+        .replace(/\x1b\[[0-9;?]*[A-Za-z~]/g, '')
+        .replace(/\x1b./g, '');
+      for (const data of cleaned) {
+        if (data === '\r' || data === '\n') {
+          const command = lineBuffer.replace(/\s+/g, ' ').trim();
+          lineBuffer = '';
+          if (command) {
+            // Un `cd` change le répertoire courant de cette session : on le
+            // résout pour le pied de page. Seulement au prompt (pas dans un TUI,
+            // où la ligne tapée n'est pas une commande shell).
+            if (!running) {
+              const nextDir = resolveDirectoryCommand(command, cwdRef.current || '');
+              if (nextDir) onDirectoryChangeRef.current?.(nextDir);
+            }
+            // On demande au serveur de regarder. `syncTitle` est rappelé par la
+            // réponse `running`, donc inutile de l'appeler ici.
+            pendingCommand = command.split(' ')[0];
+            send({ type: 'watch' });
+          }
+          continue;
         }
-        return;
+        if (data === '\x7f') {
+          // Effacement arrière.
+          lineBuffer = lineBuffer.slice(0, -1);
+          continue;
+        }
+        if (data === '\x03' || data === '\x15') {
+          // Ctrl+C et Ctrl+U abandonnent la ligne en cours.
+          lineBuffer = '';
+          continue;
+        }
+        // Uniquement les caractères imprimables : les séquences d'échappement
+        // ne doivent pas polluer le nom.
+        if (data >= ' ') lineBuffer += data;
       }
-      if (data === '\x7f') {
-        // Effacement arrière.
-        lineBuffer = lineBuffer.slice(0, -1);
-        return;
-      }
-      if (data === '\x03' || data === '\x15') {
-        // Ctrl+C et Ctrl+U abandonnent la ligne en cours.
-        lineBuffer = '';
-        return;
-      }
-      // Uniquement les caractères imprimables : les séquences d'échappement
-      // (flèches, historique, Ctrl+lettre) ne doivent pas polluer le nom.
-      if (data.length === 1 && data >= ' ') lineBuffer += data;
     };
 
     const dataDisposable = term.onData((data) => {

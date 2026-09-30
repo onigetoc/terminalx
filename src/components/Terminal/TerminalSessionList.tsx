@@ -11,6 +11,8 @@ export interface TerminalSession {
   title: string;
   /** Incrémenté par le bouton Kill : le remontage tue le shell et en ouvre un autre. */
   restartKey: number;
+  /** Répertoire courant réel de la session (suit ses `cd`). */
+  cwd?: string;
 }
 
 /** Nom par défaut d'une session : le shell du profil choisi, nommé selon l'OS. */

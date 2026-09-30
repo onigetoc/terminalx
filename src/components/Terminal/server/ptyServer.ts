@@ -115,7 +115,14 @@ export function attachPtyServer(server: HttpServer): WebSocketServer {
       }
     };
 
-    const stopWatching = () => {
+    /**
+     * `notify = false` : on abandonne le suivi en cours pour en démarrer un
+     * nouveau (nouvelle ligne validée). Il ne faut PAS envoyer `running: false`
+     * dans ce cas, car le client lirait ce message comme « la commande que je
+     * viens de valider est terminée » et effacerait son libellé avant que le
+     * nouveau probe n'ait répondu.
+     */
+    const stopWatching = (notify = true) => {
       const wasTracking = trackedPid !== null || livenessTimer !== null || retryTimer !== null;
       if (livenessTimer) {
         clearInterval(livenessTimer);
@@ -129,7 +136,7 @@ export function attachPtyServer(server: HttpServer): WebSocketServer {
       attempts = 0;
       // Sans cela le client garderait `running: true` et garderait le nom de la
       // commande alors que le shell a été tué ou relancé.
-      if (wasTracking) send({ type: 'running', running: false });
+      if (notify && wasTracking) send({ type: 'running', running: false });
     };
 
     /** Suit la mort du processus suivi : c'est le signal de retour au nom du shell. */
@@ -251,7 +258,8 @@ export function attachPtyServer(server: HttpServer): WebSocketServer {
       if (msg.type === 'watch') {
         if (!spawned || !shellProcess) return;
         if (trackedPid !== null) return;
-        stopWatching();
+        // Nouveau probe : on abandonne l'ancien SANS notifier (voir stopWatching).
+        stopWatching(false);
         probe();
         return;
       }

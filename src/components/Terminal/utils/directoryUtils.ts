@@ -54,6 +54,43 @@ export async function initializeDirectory(): Promise<string> {
   }
 }
 
+/** Commandes reconnues comme un changement de répertoire (Windows et Unix). */
+const CD_COMMAND = /^\s*(?:cd|chdir|sl|set-location)\b\s*(.*)$/i;
+
+/**
+ * Si `command` est un `cd`, renvoie le répertoire résolu, sinon `null`.
+ * Résolution volontairement simple : un chemin absolu est pris tel quel, un
+ * chemin relatif est joint à `cwd` puis normalisé (`.` et `..`).
+ */
+export function resolveDirectoryCommand(command: string, cwd: string): string | null {
+  const match = command.match(CD_COMMAND);
+  if (!match) return null;
+  let target = match[1].trim().replace(/^-path\s+/i, '').trim();
+  target = target.replace(/^["']|["']$/g, '');
+  // `cd` seul, `cd .` ou `cd -` : rien de fiable à afficher.
+  if (!target || target === '.' || target === '-') return null;
+  return resolvePath(cwd, target);
+}
+
+/** Joint `target` à `cwd` et aplatit les segments `.` et `..`. */
+function resolvePath(cwd: string, target: string): string {
+  const norm = (p: string) => p.replace(/\\/g, '/');
+  const t = norm(target);
+  const isAbsolute = /^[a-zA-Z]:\//.test(t) || t.startsWith('/');
+  const base = isAbsolute || !cwd ? t : `${norm(cwd).replace(/\/+$/, '')}/${t}`;
+  const root = base.match(/^([a-zA-Z]:\/|\/\/[^/]+\/[^/]+|\/)/)?.[1] ?? '';
+  const parts: string[] = [];
+  for (const segment of base.slice(root.length).split('/')) {
+    if (!segment || segment === '.') continue;
+    if (segment === '..') {
+      parts.pop();
+      continue;
+    }
+    parts.push(segment);
+  }
+  return root + parts.join('/');
+}
+
 /**
  * Mémorise le dossier de travail pour les prochaines sessions.
  */
