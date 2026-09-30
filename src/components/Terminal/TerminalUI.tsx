@@ -23,6 +23,7 @@ import {
 } from './InteractiveTerminal';
 import { TerminalSessionList, type TerminalSession } from './TerminalSessionList';
 import { NewTerminalMenu } from './NewTerminalMenu';
+import { BRAND_TITLE } from './config/shellProfiles';
 
 interface TerminalUIProps {
   isFullscreen: boolean;
@@ -38,8 +39,8 @@ interface TerminalUIProps {
   onSelectSession: (id: string) => void;
   onCreateSession: (shell: ShellKind) => void;
   onCloseSession: (id: string) => void;
-  /** L'utilisateur a validé une commande : la session prend son nom. */
-  onSessionTitle: (id: string, title: string) => void;
+  /** Un processus a démarré (titre) ou s'est arrêté (null = nom du shell). */
+  onSessionTitle: (id: string, title: string | null) => void;
   /** Relance la session active avec un shell neuf. */
   handleKillTerminal: () => void;
   setIsOpen: (val: boolean) => void;
@@ -61,9 +62,10 @@ const HELP_TEXT = [
   '  \x1b[1mSessions Pleines Ecran\x1b[0m\r\n',
   '    claude, opencode, vim, htop, nano, top…\r\n\r\n',
   '  \x1b[1mSessions multiples\x1b[0m\r\n',
-  '    Bouton + de la barre d\'outils : nouveau terminal,\r\n',
-  '    PowerShell ou CMD. Chaque session reste vivante en\r\n',
-  '    arrière-plan ; le panneau de droite permet d\'y revenir.\r\n',
+  '    Bouton + de la barre d\'outils : nouveau terminal\r\n',
+  '    (shell par défaut de l\'OS ; la flèche du menu propose\r\n',
+  '    les autres). Chaque session reste vivante en arrière-plan,\r\n',
+  '    le panneau de droite permet d\'y revenir.\r\n',
   '    Le nom d\'une session suit la commande lancée : tapez\r\n',
   '    opencode et l\'onglet affichera opencode.\r\n\r\n',
   '  \x1b[1mRaccourcis\x1b[0m\r\n',
@@ -108,7 +110,7 @@ export function TerminalUI(props: TerminalUIProps): JSX.Element {
 
   const { activeSessionId, sessions } = props;
   const activeSession = sessions.find((s) => s.id === activeSessionId);
-  const activeTitle = activeSession?.title ?? 'Terminal';
+  const activeTitle = activeSession?.title ?? BRAND_TITLE;
   const activeMatchCount = matchCounts[activeSessionId] ?? 0;
 
   // Ref "courante" : un objet getter mémoïsé, pour ne pas donner une nouvelle
@@ -147,7 +149,7 @@ export function TerminalUI(props: TerminalUIProps): JSX.Element {
   );
 
   const handleTitleChange = useCallback(
-    (id: string) => (title: string) => {
+    (id: string) => (title: string | null) => {
       props.onSessionTitle(id, title);
     },
     [props.onSessionTitle]

@@ -13,6 +13,12 @@ import { TerminalConfig, defaultConfig, terminalConfig } from '@/components/Term
 import type { ShellKind } from './InteractiveTerminal';
 import { defaultSessionTitle, type TerminalSession } from './TerminalSessionList';
 import {
+  BRAND_TITLE,
+  detectOsKind,
+  defaultShellFor,
+  type OsKind
+} from './config/shellProfiles';
+import {
   initializeDirectory,
   setWorkingDirectory,
   updateStoredDirectory
@@ -41,6 +47,8 @@ const Terminal: React.FC<TerminalProps> = ({ config = {} }) => {
   const [isDragging, setIsDragging] = useState(false);
   const [currentDirectory, setCurrentDirectory] = useState('');
   const [osInfo, setOsInfo] = useState('');
+  // Détecté une seule fois : sert à choisir le shell par défaut et les profils.
+  const [osKind] = useState<OsKind>(() => detectOsKind());
 
   // Sessions multiples : chacune reste montée en permanence (donc son PTY
   // reste vivant), on ne fait que masquer celle qui n'est pas active. La
@@ -67,13 +75,15 @@ const Terminal: React.FC<TerminalProps> = ({ config = {} }) => {
       });
   }, []);
 
-  // Ouvre la première session par défaut, une seule fois.
+  // Ouvre la première session par défaut, une seule fois. Le shell est celui
+  // de l'OS (PowerShell sous Windows, zsh sous macOS, bash sous Linux) ; le nom
+  // affiché reste la marque tant que l'utilisateur n'a pas lancé de commande.
   useEffect(() => {
     if (sessions.length > 0) return;
     const id = nextSessionId();
-    setSessions([{ id, shell: 'default', title: defaultSessionTitle('default'), restartKey: 0 }]);
+    setSessions([{ id, shell: defaultShellFor(osKind), title: BRAND_TITLE, restartKey: 0 }]);
     setActiveSessionId(id);
-  }, [sessions.length]);
+  }, [sessions.length, osKind]);
 
   // Modifier l'effet pour initialiser l'état isVisible avec la valeur de terminalConfig
   useEffect(() => {
@@ -157,10 +167,15 @@ const Terminal: React.FC<TerminalProps> = ({ config = {} }) => {
     setActiveSessionId(id);
   }, []);
 
-  // L'utilisateur a validé une commande : elle devient le nom de la session.
-  const handleSessionTitle = useCallback((id: string, title: string) => {
+  // Un processus est en cours → la session prend son nom. Plus rien ne tourne
+  // (`null`) → on revient au nom du profil, comme VS Code.
+  const handleSessionTitle = useCallback((id: string, title: string | null) => {
     setSessions((prev) =>
-      prev.map((session) => (session.id === id ? { ...session, title } : session))
+      prev.map((session) =>
+        session.id === id
+          ? { ...session, title: title ?? defaultSessionTitle(session.shell) }
+          : session
+      )
     );
   }, []);
 

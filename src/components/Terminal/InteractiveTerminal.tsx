@@ -8,7 +8,7 @@ import { getServerUrl } from './config/serverConfig';
 import { terminalConfig } from './config/terminalConfig';
 import './styles/terminal.css';
 
-export type ShellKind = 'default' | 'powershell' | 'cmd';
+export type ShellKind = 'default' | 'powershell' | 'cmd' | 'bash' | 'zsh';
 
 export interface InteractiveTerminalProps {
   /** Répertoire de départ de la session interactive. */
@@ -17,11 +17,11 @@ export interface InteractiveTerminalProps {
   shell?: ShellKind;
   className?: string;
   /**
-   * Rappelé quand l'utilisateur valide une ligne de commande : le parent
-   * remplace le nom de la session par celui de la commande (comme VS Code qui
-   * affiche le processus en cours). Sans argument, le nom n'est pas touché.
+   * Rappelé quand le processus au premier plan change. Le nom du processus
+   * vivant remplace celui du shell ; `null` signifie « plus rien ne tourne » et
+   * fait revenir au nom du shell.
    */
-  onTitleChange?: (title: string) => void;
+  onTitleChange?: (title: string | null) => void;
   /**
    * false = session en arrière-plan. Le composant reste monté (le PTY, le
    * buffer et le défilement survivent) mais son conteneur est masqué par le
@@ -483,7 +483,7 @@ export const InteractiveTerminal = forwardRef<InteractiveTerminalHandle, Interac
 
           socket.onmessage = (event) => {
             if (disposed) return;
-            let msg: { type: string; data?: string; message?: string; code?: number };
+            let msg: { type: string; data?: string; message?: string; code?: number; running?: boolean };
             try {
               msg = JSON.parse(String(event.data));
             } catch {
@@ -501,6 +501,13 @@ export const InteractiveTerminal = forwardRef<InteractiveTerminalHandle, Interac
                 // arriver après un changement) : ne voler le focus que si on
                 // est visibles.
                 if (container.clientWidth > 0) term.focus();
+                break;
+              case 'running':
+                // Le serveur a trouvé (ou perdu) un processus enfant du shell :
+                // c'est ce qui décide du nom affiché.
+                running = Boolean(msg.running);
+                if (!running) pendingCommand = null;
+                syncTitle();
                 break;
               case 'exit':
                 term.write('\r\n\x1b[90m[process exited]\x1b[0m\r\n');
@@ -532,24 +539,34 @@ export const InteractiveTerminal = forwardRef<InteractiveTerminalHandle, Interac
         });
     };
 
-    // Nom de la session : le shell par défaut, puis la première commande
-    // validée. On reconstruit la ligne courante à partir des frappes plutôt que
-    // de lire le buffer : c'est ce que l'utilisateur a réellement tapé, et ça
-    // ne demande pas d'intégration shell côté serveur.
+    // Nom de la session : le shell par défaut, puis le nom du processus tant
+    // qu'une commande est en cours.
     //
-    // Le nom est figé dès qu'il a été posé. Sans ça, taper dans une TUI
-    // plein écran (opencode, claude…) renommerait la session à chaque message
-    // envoyé, puisque tout passe par onData comme une ligne de commande.
+    // Le nom vient du *signal de vie* renvoyé par le serveur (un processus
+    // enfant du shell existe-t-il ?), pas du texte tapé : c'est exactement le
+    // critère de VS Code. La ligne tapée ne sert qu'à fournir le libellé, et
+    // seulement si c'est un mot isolé — `opencode`, `pi`, `claude` renommeront,
+    // `npm install` ou `git status` non. Sans ce filtre, une commande longue
+    // ferait clignoter le nom pendant qu'elle tourne.
     let lineBuffer = '';
-    let named = false;
+    let pendingCommand: string | null = null;
+    let running = false;
+    const syncTitle = () => {
+      if (running && pendingCommand && !/\s/.test(pendingCommand)) {
+        onTitleChangeRef.current?.(pendingCommand);
+      } else if (!running) {
+        onTitleChangeRef.current?.(null);
+      }
+    };
     const trackTitle = (data: string) => {
-      if (named) return;
       if (data === '\r' || data === '\n') {
         const command = lineBuffer.replace(/\s+/g, ' ').trim();
         lineBuffer = '';
         if (command) {
-          named = true;
-          onTitleChangeRef.current?.(command);
+          // On demande au serveur de regarder. `syncTitle` est rappelé par la
+          // réponse `running`, donc inutile de l'appeler ici.
+          pendingCommand = command;
+          send({ type: 'watch' });
         }
         return;
       }

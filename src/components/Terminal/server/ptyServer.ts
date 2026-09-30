@@ -2,6 +2,14 @@ import { WebSocketServer, WebSocket, type RawData } from 'ws';
 import type { Server as HttpServer } from 'http';
 import * as pty from 'node-pty';
 import { getCurrentDirectory } from './directoryService';
+import { findForegroundProcess, isProcessAlive } from './processWatcher';
+
+/** Nombre de tentatives pour attraper un programme qui démarre lentement. */
+const MAX_PROBE_ATTEMPTS = 3;
+/** Délai entre deux tentatives, en ms. */
+const PROBE_RETRY_MS = 1500;
+/** Fréquence de vérification de mort du processus suivi, en ms (gratuit). */
+const LIVENESS_INTERVAL_MS = 400;
 
 /**
  * Serveur de pseudo-terminal (PTY) pour les CLIs interactives
@@ -16,10 +24,12 @@ import { getCurrentDirectory } from './directoryService';
  *     { type: 'spawn', cols, rows, cwd?, shell? } // lancer le shell dans un PTY
  *     { type: 'input', data }               // frappes clavier vers le shell
  *     { type: 'resize', cols, rows }        // redimensionnement
+ *     { type: 'watch' }                     // scruter les processus enfants
  *     { type: 'kill' }                      // tuer la session
  *   Serveur -> Client :
  *     { type: 'ready', cwd, pid }
  *     { type: 'output', data }              // sortie du shell (ANSI)
+ *     { type: 'running', running }          // une commande est-elle en cours ?
  *     { type: 'exit', code }
  *     { type: 'error', message }
  */
@@ -30,8 +40,10 @@ export interface PtyMessage {
   cols?: number;
   rows?: number;
   cwd?: string;
-  /** Shell demandé par le client : 'default' | 'powershell' | 'cmd'. */
+  /** Shell demandé par le client : 'default' | 'powershell' | 'cmd' | 'bash' | 'zsh'. */
   shell?: string;
+  /** true = un processus enfant du shell est vivant, false = shell idle. */
+  running?: boolean;
   code?: number | null;
   message?: string;
   pid?: number;
@@ -45,10 +57,9 @@ interface ShellDefinition {
 /**
  * Choisit un shell adapté à la plateforme. Surchargeable via INTERACTIVE_SHELL.
  *
- * `preferred` vient du menu « + » du client : il permet d'ouvrir une session
- * CMD à côté d'une session PowerShell. Seuls 'powershell' et 'cmd' sont
- * exposés, et uniquement sur Windows ; partout ailleurs (et pour toute valeur
- * inconnue) on retombe sur le shell par défaut.
+ * `preferred` vient du menu « + » du client : sous Windows, 'powershell' ou
+ * 'cmd' ; ailleurs, 'zsh' ou 'bash'. Toute valeur inconnue (dont 'default' et
+ * les profils de l'autre OS) retombe sur le shell par défaut de la plateforme.
  */
 function resolveShell(preferred?: string): ShellDefinition {
   if (process.platform === 'win32') {
@@ -66,6 +77,13 @@ function resolveShell(preferred?: string): ShellDefinition {
     };
   }
 
+  if (preferred === 'zsh') {
+    return { shell: '/bin/zsh', args: [] };
+  }
+  if (preferred === 'bash') {
+    return { shell: '/bin/bash', args: [] };
+  }
+
   const shell = process.env.INTERACTIVE_SHELL || process.env.SHELL || '/bin/bash';
   return { shell, args: [] };
 }
@@ -77,6 +95,15 @@ export function attachPtyServer(server: HttpServer): WebSocketServer {
     let shellProcess: pty.IPty | null = null;
     let spawned = false;
     let handshakeTimer: NodeJS.Timeout | null = null;
+    // --- Détection du processus au premier plan ---------------------------
+    // Le client signale une validation de ligne (`watch`). On cherche alors un
+    // enfant du shell : si on en trouve un, c'est une commande longue, et on
+    // surveille sa mort avec `isProcessAlive` (gratuit). Tant qu'on n'a rien
+    // trouvé, on réessaie quelques fois : un programme peut démarrer lentement.
+    let trackedPid: number | null = null;
+    let livenessTimer: NodeJS.Timeout | null = null;
+    let retryTimer: NodeJS.Timeout | null = null;
+    let attempts = 0;
 
     const send = (message: PtyMessage) => {
       if (ws.readyState === WebSocket.OPEN) {
@@ -86,6 +113,54 @@ export function attachPtyServer(server: HttpServer): WebSocketServer {
           /* ignore */
         }
       }
+    };
+
+    const stopWatching = () => {
+      const wasTracking = trackedPid !== null || livenessTimer !== null || retryTimer !== null;
+      if (livenessTimer) {
+        clearInterval(livenessTimer);
+        livenessTimer = null;
+      }
+      if (retryTimer) {
+        clearTimeout(retryTimer);
+        retryTimer = null;
+      }
+      trackedPid = null;
+      attempts = 0;
+      // Sans cela le client garderait `running: true` et garderait le nom de la
+      // commande alors que le shell a été tué ou relancé.
+      if (wasTracking) send({ type: 'running', running: false });
+    };
+
+    /** Suit la mort du processus suivi : c'est le signal de retour au nom du shell. */
+    const trackLiveness = (pid: number) => {
+      trackedPid = pid;
+      if (livenessTimer) clearInterval(livenessTimer);
+      livenessTimer = setInterval(() => {
+        if (isProcessAlive(pid)) return;
+        stopWatching();
+      }, LIVENESS_INTERVAL_MS);
+    };
+
+    const probe = () => {
+      const pid = shellProcess?.pid;
+      if (!spawned || !shellProcess || pid === undefined) return;
+      findForegroundProcess(pid)
+        .then((found) => {
+          if (found) {
+            attempts = 0;
+            send({ type: 'running', running: true });
+            trackLiveness(found.pid);
+            return;
+          }
+          // Rien pour l'instant : le programme peut être en train de démarrer.
+          if (++attempts < MAX_PROBE_ATTEMPTS && spawned) {
+            retryTimer = setTimeout(probe, PROBE_RETRY_MS);
+          }
+        })
+        .catch(() => {
+          /* l'énumération a échoué : on retente au prochain `watch` */
+        });
     };
 
     const killShell = () => {
@@ -128,6 +203,9 @@ export function attachPtyServer(server: HttpServer): WebSocketServer {
           handshakeTimer = null;
         }
 
+        // Un nouveau shell : l'ancien suivi ne vaut plus rien.
+        stopWatching();
+
         shellProcess.onData((data) => send({ type: 'output', data }));
         shellProcess.onExit(({ exitCode }) => {
           send({ type: 'exit', code: exitCode });
@@ -169,6 +247,15 @@ export function attachPtyServer(server: HttpServer): WebSocketServer {
         return;
       }
 
+      // « L'utilisateur a validé une ligne » : on regarde s'il en démarre une.
+      if (msg.type === 'watch') {
+        if (!spawned || !shellProcess) return;
+        if (trackedPid !== null) return;
+        stopWatching();
+        probe();
+        return;
+      }
+
       if (!spawned || !shellProcess) return;
 
       switch (msg.type) {
@@ -193,9 +280,14 @@ export function attachPtyServer(server: HttpServer): WebSocketServer {
       }
     };
 
+    const cleanup = () => {
+      stopWatching();
+      killShell();
+    };
+
     ws.on('message', onMessage);
-    ws.on('close', killShell);
-    ws.on('error', killShell);
+    ws.on('close', cleanup);
+    ws.on('error', cleanup);
 
     // Si le client n'envoie pas de premier message 'spawn' (client trop ancien
     // ou déconnecté), on lance quand même un shell par sécurité.

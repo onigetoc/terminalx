@@ -18,8 +18,12 @@ async function findAvailablePort(startPort: number, endPort: number): Promise<nu
   for (let port = startPort; port <= endPort; port++) {
     try {
       await new Promise((resolve, reject) => {
+        // Le test doit binder exactement comme app.listen (host 'localhost',
+        // plus bas) : un bind wildcard par défaut n'entre pas en conflit avec
+        // un serveur déjà sur 127.0.0.1/::1 sous Windows, donc le port serait
+        // déclaré libre à tort et app.listen planterait en silence.
         const server = net.createServer()
-          .listen(port)
+          .listen(port, 'localhost')
           .once('error', reject)
           .once('listening', () => {
             server.close();

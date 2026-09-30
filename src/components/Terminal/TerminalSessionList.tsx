@@ -1,6 +1,7 @@
 import React from 'react';
 import { Trash2, Terminal as TerminalIcon } from 'lucide-react';
 import type { ShellKind } from './InteractiveTerminal';
+import { detectOsKind, shellTitle } from './config/shellProfiles';
 
 /** Une session vivante : son shell, son nom affiché et son compteur de relance. */
 export interface TerminalSession {
@@ -12,11 +13,9 @@ export interface TerminalSession {
   restartKey: number;
 }
 
-/** Nom par défaut d'une session : celui du profil choisi. */
+/** Nom par défaut d'une session : le shell du profil choisi, nommé selon l'OS. */
 export function defaultSessionTitle(shell: ShellKind): string {
-  if (shell === 'powershell') return 'PowerShell';
-  if (shell === 'cmd') return 'CMD';
-  return 'Terminal';
+  return shellTitle(shell, detectOsKind());
 }
 
 interface TerminalSessionListProps {

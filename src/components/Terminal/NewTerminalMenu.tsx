@@ -10,13 +10,7 @@ import {
 import { ChevronDown, Plus } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import type { ShellKind } from './InteractiveTerminal';
-
-/** Profils proposés par la flèche du menu, avec un séparateur avant PowerShell. */
-const PROFILES: { id: ShellKind; label: string; separate?: boolean }[] = [
-  { id: 'default', label: 'New Terminal' },
-  { id: 'powershell', label: 'PowerShell', separate: true },
-  { id: 'cmd', label: 'Command Prompt', separate: true }
-];
+import { detectOsKind, defaultShellFor, shellProfilesFor } from './config/shellProfiles';
 
 const TOOLTIP = 'bg-[#252526] text-[#d4d4d4] border border-[#333] shadow-md';
 
@@ -28,11 +22,15 @@ interface NewTerminalMenuProps {
  * Contrôle « nouveau terminal » façon VS Code : un seul bloc visuel, sans
  * l'écart de 8px qui sépare les autres icônes.
  *
- * La partie `+` crée une session avec le shell par défaut (PowerShell sous
- * Windows, ou INTERACTIVE_SHELL) ; la petite flèche, juste à côté et sans
- * espace, ouvre la liste des profils.
+ * La partie `+` crée une session avec le shell par défaut de l'OS (PowerShell
+ * sous Windows, zsh sous macOS, bash sous Linux) ; la petite flèche, juste à
+ * côté et sans espace, ouvre la liste des profils disponibles sur la machine.
  */
 export function NewTerminalMenu({ onCreate }: NewTerminalMenuProps): JSX.Element {
+  const os = detectOsKind();
+  const profiles = shellProfilesFor(os);
+  const defaultShell = defaultShellFor(os);
+
   return (
     // Le <DropdownMenu> doit être l'ancêtre du <DropdownMenuTrigger> : le root
     // fournit le contexte, et <DropdownMenuContent> est portalisé de toute
@@ -45,7 +43,7 @@ export function NewTerminalMenu({ onCreate }: NewTerminalMenuProps): JSX.Element
               <Button
                 variant="ghost"
                 size="icon"
-                onClick={() => onCreate('default')}
+                onClick={() => onCreate(defaultShell)}
                 aria-label="New terminal"
                 className="h-6 w-5 rounded-none border-none bg-transparent text-[#d4d4d4] hover:bg-[#333] hover:text-white transition-colors"
               >
@@ -82,9 +80,15 @@ export function NewTerminalMenu({ onCreate }: NewTerminalMenuProps): JSX.Element
         align="start"
         className="min-w-[180px] border-[#333] bg-[#252526] text-[#d4d4d4]"
       >
-        {PROFILES.map((profile) => (
+        <DropdownMenuItem
+          className="text-[#d4d4d4] focus:bg-[#0e639c] focus:text-white"
+          onSelect={() => onCreate(defaultShell)}
+        >
+          New Terminal
+        </DropdownMenuItem>
+        {profiles.map((profile) => (
           <React.Fragment key={profile.id}>
-            {profile.separate && <DropdownMenuSeparator className="bg-[#3c3c3c]" />}
+            <DropdownMenuSeparator className="bg-[#3c3c3c]" />
             <DropdownMenuItem
               className="text-[#d4d4d4] focus:bg-[#0e639c] focus:text-white"
               onSelect={() => onCreate(profile.id)}
