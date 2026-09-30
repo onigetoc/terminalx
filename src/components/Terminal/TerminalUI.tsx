@@ -412,7 +412,7 @@ export function TerminalUI(props: TerminalUIProps): JSX.Element {
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="bg-transparent border-none text-[#666] hover:text-[#d4d4d4] h-6 w-6 transition-colors cursor-default"
+                    className="bg-transparent border-none hover:bg-[#333] text-[#d4d4d4] hover:text-[#fff] h-6 w-6 transition-colors"
                     aria-label="Terminal Settings"
                   >
                     <Settings className="h-4 w-4 lucide" />

@@ -532,16 +532,25 @@ export const InteractiveTerminal = forwardRef<InteractiveTerminalHandle, Interac
         });
     };
 
-    // Nom de la session : le shell par défaut, puis la dernière commande
+    // Nom de la session : le shell par défaut, puis la première commande
     // validée. On reconstruit la ligne courante à partir des frappes plutôt que
     // de lire le buffer : c'est ce que l'utilisateur a réellement tapé, et ça
     // ne demande pas d'intégration shell côté serveur.
+    //
+    // Le nom est figé dès qu'il a été posé. Sans ça, taper dans une TUI
+    // plein écran (opencode, claude…) renommerait la session à chaque message
+    // envoyé, puisque tout passe par onData comme une ligne de commande.
     let lineBuffer = '';
+    let named = false;
     const trackTitle = (data: string) => {
+      if (named) return;
       if (data === '\r' || data === '\n') {
         const command = lineBuffer.replace(/\s+/g, ' ').trim();
         lineBuffer = '';
-        if (command) onTitleChangeRef.current?.(command);
+        if (command) {
+          named = true;
+          onTitleChangeRef.current?.(command);
+        }
         return;
       }
       if (data === '\x7f') {

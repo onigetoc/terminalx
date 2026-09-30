@@ -46,14 +46,14 @@ export function NewTerminalMenu({ onCreate }: NewTerminalMenuProps): JSX.Element
                 variant="ghost"
                 size="icon"
                 onClick={() => onCreate('default')}
-                aria-label="Nouveau terminal"
+                aria-label="New terminal"
                 className="h-6 w-5 rounded-none border-none bg-transparent text-[#d4d4d4] hover:bg-[#333] hover:text-white transition-colors"
               >
                 <Plus className="h-4 w-4 lucide" />
               </Button>
             </TooltipTrigger>
             <TooltipContent side="top" className={TOOLTIP}>
-              <p>Nouveau terminal</p>
+              <p>New terminal</p>
             </TooltipContent>
           </Tooltip>
 
@@ -63,7 +63,7 @@ export function NewTerminalMenu({ onCreate }: NewTerminalMenuProps): JSX.Element
                 <Button
                   variant="ghost"
                   size="icon"
-                  aria-label="Choisir un profil"
+                  aria-label="Select a profile"
                   className="h-6 w-4 rounded-none border-none border-l border-[#3c3c3c] bg-transparent text-[#d4d4d4] hover:bg-[#333] hover:text-white transition-colors"
                 >
                   <ChevronDown className="h-3 w-3 lucide" />
@@ -71,7 +71,7 @@ export function NewTerminalMenu({ onCreate }: NewTerminalMenuProps): JSX.Element
               </DropdownMenuTrigger>
             </TooltipTrigger>
             <TooltipContent side="top" className={TOOLTIP}>
-              <p>Choisir un profil</p>
+              <p>Select a profile</p>
             </TooltipContent>
           </Tooltip>
         </div>
