@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
 import { Terminal as TerminalIcon } from 'lucide-react';
 import {
@@ -10,6 +10,8 @@ import {
 import '@/components/Terminal/styles/terminal.css';
 import { TerminalUI } from './TerminalUI';
 import { TerminalConfig, defaultConfig, terminalConfig } from '@/components/Terminal/config/terminalConfig';
+import type { ShellKind } from './InteractiveTerminal';
+import { defaultSessionTitle, type TerminalSession } from './TerminalSessionList';
 import {
   initializeDirectory,
   setWorkingDirectory,
@@ -19,6 +21,10 @@ import {
 interface TerminalProps {
   config?: Partial<TerminalConfig>;
 }
+
+/** Compteur d'identifiants pour les sessions, sans dépendre d'une lib d'uuid. */
+let sessionCounter = 0;
+const nextSessionId = () => `term-${++sessionCounter}`;
 
 // Exporter la fonction de toggle pour une utilisation depuis l'extérieur
 export const handleToggleTerminal = () => {
@@ -35,10 +41,13 @@ const Terminal: React.FC<TerminalProps> = ({ config = {} }) => {
   const [isDragging, setIsDragging] = useState(false);
   const [currentDirectory, setCurrentDirectory] = useState('');
   const [osInfo, setOsInfo] = useState('');
-  // Incrémenté par le bouton Kill : le remontage de <InteractiveTerminal>
-  // tue la WebSocket (kill du shell) et en ouvre une nouvelle, donc une
-  // session PTY neuve.
-  const [sessionKey, setSessionKey] = useState(0);
+
+  // Sessions multiples : chacune reste montée en permanence (donc son PTY
+  // reste vivant), on ne fait que masquer celle qui n'est pas active. La
+  // première session est créée à la demande pour ne garder aucun shell orphelin
+  // tant que le panneau n'a pas été ouvert au moins une fois.
+  const [sessions, setSessions] = useState<TerminalSession[]>([]);
+  const [activeSessionId, setActiveSessionId] = useState('');
 
   useEffect(() => {
     const detectOS = () => {
@@ -57,6 +66,14 @@ const Terminal: React.FC<TerminalProps> = ({ config = {} }) => {
         console.error('Failed to initialize directory:', error);
       });
   }, []);
+
+  // Ouvre la première session par défaut, une seule fois.
+  useEffect(() => {
+    if (sessions.length > 0) return;
+    const id = nextSessionId();
+    setSessions([{ id, shell: 'default', title: defaultSessionTitle('default'), restartKey: 0 }]);
+    setActiveSessionId(id);
+  }, [sessions.length]);
 
   // Modifier l'effet pour initialiser l'état isVisible avec la valeur de terminalConfig
   useEffect(() => {
@@ -112,9 +129,60 @@ const Terminal: React.FC<TerminalProps> = ({ config = {} }) => {
     }
   }, [height, isFullscreen, mergedConfig.minHeight]);
 
-  // Relance une session PTY propre (le shell courant est tué).
+  // Relance la session active : le shell courant est tué, un neuf démarre dans
+  // le même onglet (remontage du composant via `restartKey`).
   const handleKillTerminal = useCallback(() => {
-    setSessionKey(prev => prev + 1);
+    setSessions((prev) =>
+      prev.map((session) =>
+        session.id === activeSessionId
+          ? { ...session, restartKey: session.restartKey + 1 }
+          : session
+      )
+    );
+  }, [activeSessionId]);
+
+  // Relance toutes les sessions : utilisé quand le répertoire de travail change,
+  // car le cwd d'un shell est figé à son lancement.
+  const restartAllSessions = useCallback(() => {
+    setSessions((prev) =>
+      prev.map((session) => ({ ...session, restartKey: session.restartKey + 1 }))
+    );
+  }, []);
+
+  const handleCreateSession = useCallback((shell: ShellKind) => {
+    const id = nextSessionId();
+    // Le nom reprend d'abord le profil choisi ; il sera remplacé par la
+    // commande dès que l'utilisateur en lancera une.
+    setSessions((prev) => [...prev, { id, shell, title: defaultSessionTitle(shell), restartKey: 0 }]);
+    setActiveSessionId(id);
+  }, []);
+
+  // L'utilisateur a validé une commande : elle devient le nom de la session.
+  const handleSessionTitle = useCallback((id: string, title: string) => {
+    setSessions((prev) =>
+      prev.map((session) => (session.id === id ? { ...session, title } : session))
+    );
+  }, []);
+
+  const handleSelectSession = useCallback((id: string) => {
+    setActiveSessionId(id);
+  }, []);
+
+  // Fermer une session démonte son <InteractiveTerminal>, ce qui envoie `kill`
+  // au PTY : le shell est réellement nettoyé côté serveur. La dernière session
+  // ne peut pas être fermée (le panneau perdrait son contenu).
+  const handleCloseSession = useCallback((id: string) => {
+    setSessions((prev) => {
+      if (prev.length <= 1) return prev;
+      const index = prev.findIndex((session) => session.id === id);
+      const remaining = prev.filter((session) => session.id !== id);
+      setActiveSessionId((current) => {
+        if (current !== id) return current;
+        // On active la voisine la plus proche, comme VS Code.
+        return remaining[Math.min(index, remaining.length - 1)]?.id ?? current;
+      });
+      return remaining;
+    });
   }, []);
 
   const handleClose = useCallback(() => {
@@ -135,15 +203,15 @@ const Terminal: React.FC<TerminalProps> = ({ config = {} }) => {
       const directory = await setWorkingDirectory(directoryHandle.name);
       setCurrentDirectory(directory);
       updateStoredDirectory(directory);
-      // Le shell déjà lancé garde son propre cwd : on redémarre la session
-      // pour qu'il démarre dans le nouveau dossier.
-      setSessionKey(prev => prev + 1);
+      // Les shells déjà lancés gardent leur propre cwd : on les redémarre pour
+      // qu'ils démarrent dans le nouveau dossier.
+      restartAllSessions();
     } catch (error: unknown) {
       if (error instanceof Error && error.name !== 'AbortError') {
         console.error('Error selecting directory:', error);
       }
     }
-  }, []);
+  }, [restartAllSessions]);
 
   return (
     <div className={`${!isVisible ? 'hidden' : ''}`}>
@@ -175,13 +243,18 @@ const Terminal: React.FC<TerminalProps> = ({ config = {} }) => {
           currentDirectory={currentDirectory}
           osInfo={osInfo}
           handleMouseDown={handleMouseDown}
+          sessions={sessions}
+          activeSessionId={activeSessionId}
+          onSelectSession={handleSelectSession}
+          onCreateSession={handleCreateSession}
+          onCloseSession={handleCloseSession}
+          onSessionTitle={handleSessionTitle}
           handleKillTerminal={handleKillTerminal}
           setIsOpen={handleClose}
           setIsMinimized={setIsMinimized}
           setIsFullscreen={setIsFullscreen}
           mergedConfig={mergedConfig}
           onFolderSelect={onFolderSelect}
-          sessionKey={sessionKey}
         />
       )}
     </div>

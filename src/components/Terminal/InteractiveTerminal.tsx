@@ -8,10 +8,27 @@ import { getServerUrl } from './config/serverConfig';
 import { terminalConfig } from './config/terminalConfig';
 import './styles/terminal.css';
 
+export type ShellKind = 'default' | 'powershell' | 'cmd';
+
 export interface InteractiveTerminalProps {
   /** Répertoire de départ de la session interactive. */
   currentDirectory?: string;
+  /** Shell demandé au serveur. 'default' suit la config serveur. */
+  shell?: ShellKind;
   className?: string;
+  /**
+   * Rappelé quand l'utilisateur valide une ligne de commande : le parent
+   * remplace le nom de la session par celui de la commande (comme VS Code qui
+   * affiche le processus en cours). Sans argument, le nom n'est pas touché.
+   */
+  onTitleChange?: (title: string) => void;
+  /**
+   * false = session en arrière-plan. Le composant reste monté (le PTY, le
+   * buffer et le défilement survivent) mais son conteneur est masqué par le
+   * parent ; le passage à true déclenche un refit + focus, car xterm ne peut
+   * pas mesurer un conteneur `display: none`.
+   */
+  visible?: boolean;
   /** Notifie le parent du nombre d'occurrences trouvées par la recherche. */
   onMatchCount?: (count: number) => void;
   /**
@@ -60,12 +77,31 @@ const SEARCH_OPTIONS: ISearchOptions = {
  * comme `claude`, `opencode`, `vim`, `htop`, `nano`, etc.
  */
 export const InteractiveTerminal = forwardRef<InteractiveTerminalHandle, InteractiveTerminalProps>(
-  function InteractiveTerminal({ currentDirectory, className = '', onMatchCount, onSearchRequest }, ref) {
+  function InteractiveTerminal(
+    {
+      currentDirectory,
+      shell = 'default',
+      className = '',
+      visible = true,
+      onMatchCount,
+      onSearchRequest,
+      onTitleChange
+    },
+    ref
+  ) {
   const containerRef = useRef<HTMLDivElement>(null);
   // On garde la valeur à jour dans une ref pour être utilisée à l'ouverture
   // de la WebSocket sans dépendance d'effet (et sans avertissement ESLint).
   const cwdRef = useRef(currentDirectory);
   cwdRef.current = currentDirectory;
+  const shellRef = useRef(shell);
+  shellRef.current = shell;
+  // fit() est défini dans l'effet de montage ; cet effet externe en a besoin
+  // pour refaire le fit au retour en vue.
+  const fitRef = useRef<() => void>(() => {});
+  // Lu à chaque frappe, sans redéclencher d'effet.
+  const onTitleChangeRef = useRef(onTitleChange);
+  onTitleChangeRef.current = onTitleChange;
   // Instance xterm exposée au parent (clear/write/search) : elle n'existe
   // qu'après le montage, d'où la ref objet.
   const termRef = useRef<XTerm | null>(null);
@@ -412,6 +448,11 @@ export const InteractiveTerminal = forwardRef<InteractiveTerminalHandle, Interac
     container.addEventListener('drop', handleDrop);
 
     const fit = () => {
+      // xterm ne peut pas calculer de dimensions sur un conteneur masqué
+      // (`display: none` => 0x0) et `fit()` lève dans ce cas. On ignore : le
+      // ResizeObserver ou le passage de `visible` à true referont le fit quand
+      // la session redevient visible.
+      if (container.clientWidth === 0 || container.clientHeight === 0) return;
       try {
         fitAddon.fit();
       } catch {
@@ -435,7 +476,8 @@ export const InteractiveTerminal = forwardRef<InteractiveTerminalHandle, Interac
               type: 'spawn',
               cols: term.cols,
               rows: term.rows,
-              cwd: cwdRef.current
+              cwd: cwdRef.current,
+              shell: shellRef.current
             });
           };
 
@@ -454,7 +496,11 @@ export const InteractiveTerminal = forwardRef<InteractiveTerminalHandle, Interac
                 break;
               case 'ready':
                 fit();
-                term.focus();
+                // Une session peut être ouverte en arrière-plan (le menu « + »
+                // crée la nouvelle session déjà active, mais un `ready` peut
+                // arriver après un changement) : ne voler le focus que si on
+                // est visibles.
+                if (container.clientWidth > 0) term.focus();
                 break;
               case 'exit':
                 term.write('\r\n\x1b[90m[process exited]\x1b[0m\r\n');
@@ -486,7 +532,37 @@ export const InteractiveTerminal = forwardRef<InteractiveTerminalHandle, Interac
         });
     };
 
-    const dataDisposable = term.onData((data) => send({ type: 'input', data }));
+    // Nom de la session : le shell par défaut, puis la dernière commande
+    // validée. On reconstruit la ligne courante à partir des frappes plutôt que
+    // de lire le buffer : c'est ce que l'utilisateur a réellement tapé, et ça
+    // ne demande pas d'intégration shell côté serveur.
+    let lineBuffer = '';
+    const trackTitle = (data: string) => {
+      if (data === '\r' || data === '\n') {
+        const command = lineBuffer.replace(/\s+/g, ' ').trim();
+        lineBuffer = '';
+        if (command) onTitleChangeRef.current?.(command);
+        return;
+      }
+      if (data === '\x7f') {
+        // Effacement arrière.
+        lineBuffer = lineBuffer.slice(0, -1);
+        return;
+      }
+      if (data === '\x03' || data === '\x15') {
+        // Ctrl+C et Ctrl+U abandonnent la ligne en cours.
+        lineBuffer = '';
+        return;
+      }
+      // Uniquement les caractères imprimables : les séquences d'échappement
+      // (flèches, historique, Ctrl+lettre) ne doivent pas polluer le nom.
+      if (data.length === 1 && data >= ' ') lineBuffer += data;
+    };
+
+    const dataDisposable = term.onData((data) => {
+      send({ type: 'input', data });
+      trackTitle(data);
+    });
     const resizeDisposable = term.onResize(({ cols, rows }) => send({ type: 'resize', cols, rows }));
 
     const resizeObserver = new ResizeObserver(() => fit());
@@ -495,11 +571,13 @@ export const InteractiveTerminal = forwardRef<InteractiveTerminalHandle, Interac
     // Ajuste la taille initiale puis ouvre la session.
     fit();
     connect();
+    fitRef.current = fit;
 
     return () => {
       disposed = true;
       termRef.current = null;
       searchRef.current = null;
+        fitRef.current = () => {};
       if (reconnectTimer) clearTimeout(reconnectTimer);
       container.removeEventListener('contextmenu', handleContextMenu);
       container.removeEventListener('dragover', handleDragOver);
@@ -531,6 +609,18 @@ export const InteractiveTerminal = forwardRef<InteractiveTerminalHandle, Interac
       }
     };
   }, []);
+
+  // Retour en vue : le conteneur vient de redevenir mesurable, on refit et on
+  // donne le focus. `requestAnimationFrame` laisse le navigateur appliquer la
+  // visibilité avant la mesure.
+  useEffect(() => {
+    if (!visible) return;
+    const raf = requestAnimationFrame(() => {
+      fitRef.current();
+      termRef.current?.focus();
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [visible]);
 
   useImperativeHandle(ref, () => ({
     clear: () => termRef.current?.clear(),

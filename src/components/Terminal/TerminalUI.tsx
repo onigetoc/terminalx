@@ -1,14 +1,28 @@
-import React, { useRef, useCallback, useState, useEffect } from 'react';
+import React, { useRef, useCallback, useMemo, useState, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
 import {
-  BadgeX, FolderOpen, Plus, Minus, Maximize, Minimize, X, Terminal as TerminalIcon, Eraser, HelpCircle, Info
+  BadgeX,
+  Eraser,
+  FolderOpen,
+  HelpCircle,
+  Info,
+  Maximize,
+  Minus,
+  Minimize,
+  Plus,
+  Settings,
+  Terminal as TerminalIcon,
+  X
 } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import TerminalSearch, { type TerminalSearchRef } from './TerminalSearch';
 import {
   InteractiveTerminal,
-  type InteractiveTerminalHandle
+  type InteractiveTerminalHandle,
+  type ShellKind
 } from './InteractiveTerminal';
+import { TerminalSessionList, type TerminalSession } from './TerminalSessionList';
+import { NewTerminalMenu } from './NewTerminalMenu';
 
 interface TerminalUIProps {
   isFullscreen: boolean;
@@ -18,6 +32,15 @@ interface TerminalUIProps {
   currentDirectory: string;
   osInfo: string;
   handleMouseDown: (e: React.MouseEvent<HTMLDivElement>) => void;
+  /** Sessions vivantes : toutes restent montées, une seule est visible. */
+  sessions: TerminalSession[];
+  activeSessionId: string;
+  onSelectSession: (id: string) => void;
+  onCreateSession: (shell: ShellKind) => void;
+  onCloseSession: (id: string) => void;
+  /** L'utilisateur a validé une commande : la session prend son nom. */
+  onSessionTitle: (id: string, title: string) => void;
+  /** Relance la session active avec un shell neuf. */
   handleKillTerminal: () => void;
   setIsOpen: (val: boolean) => void;
   setIsMinimized: (val: boolean) => void;
@@ -29,8 +52,6 @@ interface TerminalUIProps {
     minHeight: number;
   };
   onFolderSelect?: () => Promise<void>;
-  /** Incrémenté par le bouton Kill pour redémarrer la session PTY. */
-  sessionKey: number;
 }
 
 // Messages écrits directement dans le buffer xterm, sans passer par le shell.
@@ -39,6 +60,12 @@ const HELP_TEXT = [
   '\x1b[90m───────────────────────────────────────\x1b[0m\r\n',
   '  \x1b[1mSessions Pleines Ecran\x1b[0m\r\n',
   '    claude, opencode, vim, htop, nano, top…\r\n\r\n',
+  '  \x1b[1mSessions multiples\x1b[0m\r\n',
+  '    Bouton + de la barre d\'outils : nouveau terminal,\r\n',
+  '    PowerShell ou CMD. Chaque session reste vivante en\r\n',
+  '    arrière-plan ; le panneau de droite permet d\'y revenir.\r\n',
+  '    Le nom d\'une session suit la commande lancée : tapez\r\n',
+  '    opencode et l\'onglet affichera opencode.\r\n\r\n',
   '  \x1b[1mRaccourcis\x1b[0m\r\n',
   '    Ctrl+C / Cmd+C      copie la sélection (sinon envoie SIGINT)\r\n',
   '    Ctrl+Shift+C        copie la sélection\r\n',
@@ -70,11 +97,31 @@ const ABOUT_TEXT = [
 
 export function TerminalUI(props: TerminalUIProps): JSX.Element {
   const searchRef = useRef<TerminalSearchRef | null>(null);
-  const terminalRef = useRef<InteractiveTerminalHandle | null>(null);
+  // Une ref xterm par session : la barre de recherche et les boutons du pied de
+  // page doivent agir sur la session visible, pas sur la dernière montée.
+  const terminalRefs = useRef(new Map<string, InteractiveTerminalHandle | null>());
   const [isSearchVisible, setIsSearchVisible] = useState(false);
-  const [matchCount, setMatchCount] = useState(0);
+  // Compteur de correspondances par session (absent = jamais cherchée).
+  const [matchCounts, setMatchCounts] = useState<Record<string, number>>({});
   // Terme fourni à l'ouverture (sélection xterm), consommé par <TerminalSearch>.
   const [initialSearchText, setInitialSearchText] = useState('');
+
+  const { activeSessionId, sessions } = props;
+  const activeSession = sessions.find((s) => s.id === activeSessionId);
+  const activeTitle = activeSession?.title ?? 'Terminal';
+  const activeMatchCount = matchCounts[activeSessionId] ?? 0;
+
+  // Ref "courante" : un objet getter mémoïsé, pour ne pas donner une nouvelle
+  // identité à <TerminalSearch> (qui l'a en dépendance d'effet) à chaque rendu.
+  const terminalRef = useMemo(
+    () =>
+      ({
+        get current() {
+          return terminalRefs.current.get(activeSessionId) ?? null;
+        }
+      }) as React.RefObject<InteractiveTerminalHandle | null>,
+    [activeSessionId]
+  );
 
   // Ctrl+F est intercepté par InteractiveTerminal (il faut le court-circuit
   // avant que xterm n'envoie la frappe au shell). Ici on ne gère qu'Escape
@@ -92,6 +139,20 @@ export function TerminalUI(props: TerminalUIProps): JSX.Element {
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [isSearchVisible]);
 
+  const handleMatchCount = useCallback(
+    (id: string) => (count: number) => {
+      setMatchCounts((prev) => ({ ...prev, [id]: count }));
+    },
+    []
+  );
+
+  const handleTitleChange = useCallback(
+    (id: string) => (title: string) => {
+      props.onSessionTitle(id, title);
+    },
+    [props.onSessionTitle]
+  );
+
   // Ouverture via Ctrl+F (raccourci intercepté dans <InteractiveTerminal>).
   // Une sélection active pré-remplit l'input et lance la recherche dessus,
   // comme dans VS Code.
@@ -104,15 +165,14 @@ export function TerminalUI(props: TerminalUIProps): JSX.Element {
       setInitialSearchText('');
     }
     setIsSearchVisible(true);
-  }, []);
+  }, [terminalRef]);
 
   const handleCloseSearch = useCallback(() => {
     setIsSearchVisible(false);
-    setMatchCount(0);
     // Le focus repart dans le terminal, sinon les frappes suivantes
     // n'atteignent plus le shell.
     terminalRef.current?.focus();
-  }, []);
+  }, [terminalRef]);
 
   const tooltipStyle = "bg-[#252526] text-[#d4d4d4] border border-[#333] shadow-md";
 
@@ -139,13 +199,15 @@ export function TerminalUI(props: TerminalUIProps): JSX.Element {
           onMouseDown={props.handleMouseDown}
         />
 
+        {/* Barre du haut : nom de la session active à gauche, actions à droite
+            (le « + » est juste avant Minimiser, comme dans l'exemple). */}
         <div className="flex items-center justify-between px-4 py-2 bg-[#252526] border-b border-[#333]">
-          <div className="flex items-center">
-            <TerminalIcon className="w-4 h-4 mr-2 lucide" />
-            <span className="text-sm font-medium">Terminal</span>
+          <div className="flex items-center min-w-0">
+            <TerminalIcon className="w-4 h-4 mr-2 lucide shrink-0" />
+            <span className="text-sm font-medium truncate">{activeTitle}</span>
           </div>
           {!props.mergedConfig.readOnlyMode && (
-            <div className="flex space-x-2">
+            <div className="flex items-center space-x-2">
               <TooltipProvider delayDuration={50}>
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -178,6 +240,9 @@ export function TerminalUI(props: TerminalUIProps): JSX.Element {
                     <p>Select Working Directory</p>
                   </TooltipContent>
                 </Tooltip>
+
+                {/* Nouveau terminal : à gauche de Minimiser. */}
+                <NewTerminalMenu onCreate={props.onCreateSession} />
 
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -231,88 +296,139 @@ export function TerminalUI(props: TerminalUIProps): JSX.Element {
           )}
         </div>
 
-        {!props.mergedConfig.readOnlyMode && (
-          <div className="relative p-1.5 pl-2 pr-2 bg-[#252526] border-b border-[#333] text-xs text-gray-400 flex justify-between items-center">
-            <div>Current directory: {props.currentDirectory || 'Loading...'}</div>
-            <div>User OS: {props.osInfo}</div>
-          </div>
-        )}
-
-        {!props.isMinimized && (
-          <div className="terminal-content-wrapper relative">
+        {/* Corps : les sessions à gauche, le panneau qui les liste à droite. */}
+        <div className="flex flex-1 min-h-0">
+          {/* Les sessions ne sont JAMAIS démontées : un démontage tuerait le
+              PTY. On masque le conteneur en CSS quand la fenêtre est
+              minimisée. */}
+          <div
+            className={`terminal-content-wrapper relative flex-1 min-w-0 ${
+              props.isMinimized ? 'hidden' : ''
+            }`}
+          >
+            {/* La recherche vit hors des sessions : elle cible toujours la
+                session visible via `terminalRef`. */}
             <TerminalSearch
               ref={searchRef}
               isVisible={isSearchVisible}
               onClose={handleCloseSearch}
               terminalRef={terminalRef}
-              matchCount={matchCount}
+              matchCount={activeMatchCount}
               initialTerm={initialSearchText}
             />
-            <InteractiveTerminal
-              key={props.sessionKey}
-              ref={terminalRef}
-              currentDirectory={props.currentDirectory}
-              onMatchCount={setMatchCount}
-              onSearchRequest={openSearch}
-              className="interactive-terminal"
+            {sessions.map((session) => {
+              const isActive = session.id === activeSessionId && !props.isMinimized;
+              return (
+                <InteractiveTerminal
+                  // `restartKey` dans la key : le bouton Kill remonte le
+                  // composant, ce qui tue le shell et en ouvre un neuf.
+                  key={`${session.id}:${session.restartKey}`}
+                  ref={(handle) => {
+                    terminalRefs.current.set(session.id, handle);
+                  }}
+                  shell={session.shell}
+                  visible={isActive}
+                  currentDirectory={props.currentDirectory}
+                  onMatchCount={handleMatchCount(session.id)}
+                  onSearchRequest={openSearch}
+                  onTitleChange={handleTitleChange(session.id)}
+                  // Les sessions inactives restent montées mais masquées : le
+                  // PTY, le buffer et le défilement survivent au changement.
+                  className={isActive ? 'interactive-terminal' : 'interactive-terminal hidden'}
+                />
+              );
+            })}
+          </div>
+
+          {!props.mergedConfig.readOnlyMode && !props.isMinimized && (
+            <TerminalSessionList
+              sessions={sessions}
+              activeId={activeSessionId}
+              onSelect={props.onSelectSession}
+              onClose={props.onCloseSession}
             />
+          )}
+        </div>
 
-            {!props.mergedConfig.readOnlyMode && (
-              <div className="terminal-footer flex items-center justify-end gap-2 p-1.5 pl-2 pr-2 bg-[#252526] border-t border-[#333]">
-                <TooltipProvider delayDuration={50}>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="bg-transparent border-none hover:bg-[#333] text-[#d4d4d4] hover:text-[#fff] h-6 w-6 transition-colors"
-                        onClick={() => terminalRef.current?.clear()}
-                      >
-                        <Eraser className="h-4 w-4 lucide" />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent side="top" className={tooltipStyle}>
-                      <p>Clear Terminal</p>
-                    </TooltipContent>
-                  </Tooltip>
+        {!props.mergedConfig.readOnlyMode && (
+          <div className="terminal-footer flex items-center justify-between gap-4 p-1.5 pl-2 pr-2 bg-[#252526] border-t border-[#333]">
+            {/* OS de l'utilisateur à gauche. Le répertoire courant n'est plus
+                affiché ici : on le voit directement dans le prompt du shell. */}
+            <div className="min-w-0 truncate text-xs text-gray-400">User OS: {props.osInfo}</div>
+            <div className="flex shrink-0 items-center gap-2">
+              <TooltipProvider delayDuration={50}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="bg-transparent border-none hover:bg-[#333] text-[#d4d4d4] hover:text-[#fff] h-6 w-6 transition-colors"
+                    onClick={() => terminalRef.current?.clear()}
+                  >
+                    <Eraser className="h-4 w-4 lucide" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="top" className={tooltipStyle}>
+                  <p>Clear Terminal</p>
+                </TooltipContent>
+              </Tooltip>
 
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="bg-transparent border-none hover:bg-[#333] text-[#d4d4d4] hover:text-[#fff] h-6 w-6 transition-colors"
-                        onClick={() => terminalRef.current?.write(HELP_TEXT.join(''))}
-                      >
-                        <HelpCircle className="h-4 w-4 lucide" />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent side="top" className={tooltipStyle}>
-                      <p>Help</p>
-                    </TooltipContent>
-                  </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="bg-transparent border-none hover:bg-[#333] text-[#d4d4d4] hover:text-[#fff] h-6 w-6 transition-colors"
+                    onClick={() => terminalRef.current?.write(HELP_TEXT.join(''))}
+                  >
+                    <HelpCircle className="h-4 w-4 lucide" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="top" className={tooltipStyle}>
+                  <p>Help</p>
+                </TooltipContent>
+              </Tooltip>
 
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="bg-transparent border-none hover:bg-[#333] text-[#d4d4d4] hover:text-[#fff] h-6 w-6 transition-colors"
-                        onClick={() => terminalRef.current?.write(ABOUT_TEXT.join(''))}
-                      >
-                        <Info className="h-4 w-4 lucide" />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent side="top" className={tooltipStyle}>
-                      <p>About</p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              </div>
-            )}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="bg-transparent border-none hover:bg-[#333] text-[#d4d4d4] hover:text-[#fff] h-6 w-6 transition-colors"
+                    onClick={() => terminalRef.current?.write(ABOUT_TEXT.join(''))}
+                  >
+                    <Info className="h-4 w-4 lucide" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="top" className={tooltipStyle}>
+                  <p>About</p>
+                </TooltipContent>
+              </Tooltip>
+
+              {/* Settings : à droite du groupe d'icônes. Pas encore
+                  fonctionnel — l'icône est là pour réserver la place. */}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="bg-transparent border-none text-[#666] hover:text-[#d4d4d4] h-6 w-6 transition-colors cursor-default"
+                    aria-label="Terminal Settings"
+                  >
+                    <Settings className="h-4 w-4 lucide" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="top" className={tooltipStyle}>
+                  <p>Terminal Settings</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+            </div>
           </div>
         )}
       </div>
     </div>
   );
 }
+
+export default TerminalUI;

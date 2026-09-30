@@ -13,7 +13,7 @@ import { getCurrentDirectory } from './directoryService';
  *
  * Protocole WebSocket (JSON) :
  *   Client -> Serveur :
- *     { type: 'spawn', cols, rows, cwd? }   // lancer le shell dans un PTY
+ *     { type: 'spawn', cols, rows, cwd?, shell? } // lancer le shell dans un PTY
  *     { type: 'input', data }               // frappes clavier vers le shell
  *     { type: 'resize', cols, rows }        // redimensionnement
  *     { type: 'kill' }                      // tuer la session
@@ -30,6 +30,8 @@ export interface PtyMessage {
   cols?: number;
   rows?: number;
   cwd?: string;
+  /** Shell demandé par le client : 'default' | 'powershell' | 'cmd'. */
+  shell?: string;
   code?: number | null;
   message?: string;
   pid?: number;
@@ -40,9 +42,22 @@ interface ShellDefinition {
   args: string[];
 }
 
-/** Choisit un shell adapté à la plateforme. Surchargeable via INTERACTIVE_SHELL. */
-function resolveShell(): ShellDefinition {
+/**
+ * Choisit un shell adapté à la plateforme. Surchargeable via INTERACTIVE_SHELL.
+ *
+ * `preferred` vient du menu « + » du client : il permet d'ouvrir une session
+ * CMD à côté d'une session PowerShell. Seuls 'powershell' et 'cmd' sont
+ * exposés, et uniquement sur Windows ; partout ailleurs (et pour toute valeur
+ * inconnue) on retombe sur le shell par défaut.
+ */
+function resolveShell(preferred?: string): ShellDefinition {
   if (process.platform === 'win32') {
+    if (preferred === 'cmd') {
+      return { shell: 'cmd.exe', args: [] };
+    }
+    if (preferred === 'powershell') {
+      return { shell: 'powershell.exe', args: ['-NoLogo'] };
+    }
     // PowerShell est plus confortable qu'un cmd.exe brut pour un dev, mais on
     // laisse la possibilité de forcer avec INTERACTIVE_SHELL=cmd.exe
     return {
@@ -86,10 +101,10 @@ export function attachPtyServer(server: HttpServer): WebSocketServer {
       spawned = false;
     };
 
-    const spawnShell = (opts: { cols?: number; rows?: number; cwd?: string }) => {
+    const spawnShell = (opts: { cols?: number; rows?: number; cwd?: string; shell?: string }) => {
       if (spawned) return;
 
-      const { shell, args } = resolveShell();
+      const { shell, args } = resolveShell(opts.shell);
       const cwd = opts.cwd || getCurrentDirectory();
 
       try {
@@ -150,7 +165,7 @@ export function attachPtyServer(server: HttpServer): WebSocketServer {
       if (!msg || typeof msg.type !== 'string') return;
 
       if (msg.type === 'spawn') {
-        spawnShell({ cols: msg.cols, rows: msg.rows, cwd: msg.cwd });
+        spawnShell({ cols: msg.cols, rows: msg.rows, cwd: msg.cwd, shell: msg.shell });
         return;
       }
 
