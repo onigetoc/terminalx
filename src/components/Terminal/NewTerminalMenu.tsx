@@ -10,10 +10,11 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu';
-import { ChevronDown, Plus, Sparkles } from 'lucide-react';
+import { ChevronDown, Download, Plus, Sparkles } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { ProviderIcon } from './AgentMenu';
-import { AI_PROVIDERS, type AiProvider } from './config/aiProviders';
+import { ProviderIcon, shortVersion } from './AgentMenu';
+import { useAgentPicker } from './useAgentPicker';
+import { AI_PROVIDERS } from './config/aiProviders';
 import type { ShellKind } from './InteractiveTerminal';
 import { detectOsKind, defaultShellFor, shellProfilesFor } from './config/shellProfiles';
 
@@ -36,6 +37,7 @@ export function NewTerminalMenu({ onCreate }: NewTerminalMenuProps): JSX.Element
   const os = detectOsKind();
   const profiles = shellProfilesFor(os);
   const defaultShell = defaultShellFor(os);
+  const picker = useAgentPicker((provider) => onCreate(defaultShell, provider.command));
 
   return (
     // Le <DropdownMenu> doit être l'ancêtre du <DropdownMenuTrigger> : le root
@@ -116,19 +118,34 @@ export function NewTerminalMenu({ onCreate }: NewTerminalMenuProps): JSX.Element
             AI Agent
           </DropdownMenuSubTrigger>
           <DropdownMenuSubContent className="min-w-[180px] border-[#333] bg-[#252526] text-[#d4d4d4]">
-            {AI_PROVIDERS.map((provider: AiProvider) => (
-              <DropdownMenuItem
-                key={provider.id}
-                className="gap-2 text-[#d4d4d4] focus:bg-[#0e639c] focus:text-white"
-                onSelect={() => onCreate(defaultShell, provider.command)}
-              >
-                <ProviderIcon provider={provider} />
-                <span>{provider.label}</span>
-              </DropdownMenuItem>
-            ))}
+            {AI_PROVIDERS.map((provider) => {
+              const missing = picker.installed[provider.id] === false;
+              const version = missing ? undefined : shortVersion(picker.versions[provider.id]);
+              return (
+                <DropdownMenuItem
+                  key={provider.id}
+                  // Grisé seulement si le probe a formellement répondu « absent » :
+                  // un statut encore inconnu laisse l'entrée à sa couleur normale.
+                  className={`gap-2 text-[#d4d4d4] focus:bg-[#0e639c] focus:text-white ${
+                    missing ? 'opacity-50' : ''
+                  }`}
+                  onSelect={() => picker.choose(provider)}
+                >
+                  <ProviderIcon provider={provider} />
+                  <span className="flex-1">{provider.label}</span>
+                  {missing ? (
+                    <Download className="h-3 w-3 shrink-0" aria-label="Not installed" />
+                  ) : (
+                    version && <span className="shrink-0 text-[10px] text-[#6f6f6f]">{version}</span>
+                  )}
+                </DropdownMenuItem>
+              );
+            })}
           </DropdownMenuSubContent>
         </DropdownMenuSub>
       </DropdownMenuContent>
+
+      {picker.dialog}
     </DropdownMenu>
   );
 }

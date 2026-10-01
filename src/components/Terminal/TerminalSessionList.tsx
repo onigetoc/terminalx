@@ -83,14 +83,22 @@ export function TerminalSessionList(props: TerminalSessionListProps): JSX.Elemen
                 <TerminalIcon className="h-3.5 w-3.5 shrink-0 lucide opacity-80" />
                 <span className="truncate">{session.title}</span>
               </button>
-              {/* Agent puis corbeille : les deux n'apparaissent qu'au survol. */}
+              {/* Agent puis corbeille : les deux n'apparaissent qu'au survol.
+                  La corbeille est en `invisible`, PAS en `hidden` : `display:none`
+                  la sort du flux, donc elle vaut zéro largeur au repos et
+                  réapparaît en 24px au survol — la ligne s'élargit et le bouton
+                  agent se tasse vers la gauche, ce qui faisait atterrir le clic
+                  sur la corbeille. `visibility:hidden` garde la place et neutralise
+                  le survol. Le bouton reste atteignable au clavier (`focus-visible`
+                  le révèle) : la corbeille est une action destructive, elle ne doit
+                  pas disparaître pour qui navigue au clavier. */}
               <AgentMenu selected={agents[session.id]} onSelect={launchAgent(session.id)} />
               {sessions.length > 1 && (
                 <button
                   type="button"
                   aria-label={`Close ${session.title}`}
                   onClick={() => props.onClose(session.id)}
-                  className="hidden h-6 w-6 shrink-0 items-center justify-center rounded-sm text-[#cccccc] hover:bg-[#3c3c3c] hover:text-white group-hover:flex"
+                  className="invisible flex h-6 w-6 shrink-0 items-center justify-center rounded-sm text-[#cccccc] hover:bg-[#3c3c3c] hover:text-white group-hover:visible focus-visible:visible"
                 >
                   <Trash2 className="h-3.5 w-3.5" />
                 </button>

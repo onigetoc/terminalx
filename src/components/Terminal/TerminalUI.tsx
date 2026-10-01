@@ -23,6 +23,7 @@ import {
 } from './InteractiveTerminal';
 import { TerminalSessionList, type TerminalSession } from './TerminalSessionList';
 import { NewTerminalMenu } from './NewTerminalMenu';
+import { TerminalOverlayHostContext } from './TerminalOverlay';
 import { BRAND_TITLE } from './config/shellProfiles';
 
 interface TerminalUIProps {
@@ -116,6 +117,8 @@ export function TerminalUI(props: TerminalUIProps): JSX.Element {
   const [matchCounts, setMatchCounts] = useState<Record<string, number>>({});
   // Terme fourni à l'ouverture (sélection xterm), consommé par <TerminalSearch>.
   const [initialSearchText, setInitialSearchText] = useState('');
+  // Élément hôte des surfaces flottantes du terminal (dialogues). Cf. TerminalOverlay.
+  const [overlayHost, setOverlayHost] = useState<HTMLDivElement | null>(null);
 
   const { activeSessionId, sessions } = props;
   const activeSession = sessions.find((s) => s.id === activeSessionId);
@@ -211,15 +214,16 @@ export function TerminalUI(props: TerminalUIProps): JSX.Element {
   }`;
 
   return (
-    <div className={`terminal-container ${terminalClasses}`}>
-      <div
-        className="terminal-window"
-        style={{
-          height: props.isFullscreen ? '100vh' : props.isMinimized ? '40px' : props.height,
-          fontSize: `${props.mergedConfig.fontSize}px`,
-          fontFamily: props.mergedConfig.fontFamily,
-        }}
-      >
+    <TerminalOverlayHostContext.Provider value={overlayHost}>
+      <div className={`terminal-container ${terminalClasses}`}>
+        <div
+          className="terminal-window"
+          style={{
+            height: props.isFullscreen ? '100vh' : props.isMinimized ? '40px' : props.height,
+            fontSize: `${props.mergedConfig.fontSize}px`,
+            fontFamily: props.mergedConfig.fontFamily,
+          }}
+        >
         <div
           className="absolute top-0 left-0 right-0 h-1 cursor-ns-resize"
           onMouseDown={props.handleMouseDown}
@@ -460,8 +464,15 @@ export function TerminalUI(props: TerminalUIProps): JSX.Element {
             </div>
           </div>
         )}
+        {/* Hôte des surfaces flottantes (dialogue d'installation d'un agent).
+            Vide et non positionné : les enfants portailisés se positionnent en
+            `absolute` sur `.terminal-window`, qui est `relative` + `overflow:hidden`.
+            C'est ce qui garde le dialogue dans la fenêtre du terminal au lieu de
+            recouvrir toute la page qui l'accueille. */}
+        <div ref={setOverlayHost} />
+        </div>
       </div>
-    </div>
+    </TerminalOverlayHostContext.Provider>
   );
 }
 

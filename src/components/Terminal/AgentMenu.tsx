@@ -5,14 +5,18 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu';
-import { Bot } from 'lucide-react';
+import { Bot, Download } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { AI_PROVIDERS, type AiProvider } from './config/aiProviders';
+import { useAgentPicker } from './useAgentPicker';
 
 /**
- * Marque d'un provider. Le path est dans le viewBox 24x24 de Lucide, donc il
- * se dimensionne exactement comme une icône Lucide : on ne passe que la classe
- * de taille, le remplissage vient du provider (ou du texte si absent).
+ * Marque d'un provider. Rendue dans le viewBox du logo, donc elle se
+ * dimensionne exactement comme une icône Lucide : on ne passe que la classe de
+ * taille, le remplissage vient du provider (ou du texte si absent).
+ *
+ * `fillRule` est reporté path par path — sans lui, les logos qui percent un
+ * rectangle (OpenCode) ou leur propre contre-trou (Pi) ressortent pleins.
  *
  * Pas de classe `lucide` ici : `terminal.css` force `1.2em` sur `.lucide`, ce
  * qui écraserait la taille du menu déroulant.
@@ -25,10 +29,35 @@ export function ProviderIcon({
   className?: string;
 }): JSX.Element {
   return (
-    <svg viewBox="0 0 24 24" className={className} aria-hidden="true">
-      {provider.path && <path d={provider.path} fill={provider.fill ?? 'currentColor'} />}
+    <svg
+      viewBox={provider.logo.viewBox ?? '0 0 24 24'}
+      className={className}
+      aria-hidden="true"
+    >
+      {provider.logo.paths.map((mark) => (
+        <path
+          key={mark.d}
+          d={mark.d}
+          fill={provider.fill ?? 'currentColor'}
+          fillRule={mark.fillRule}
+        />
+      ))}
     </svg>
   );
+}
+
+/**
+ * Numéro de version court affiché à droite d'un agent installé.
+ *
+ * On extrait le premier motif semver de la sortie de `--version` plutôt que la
+ * ligne entière : `claude --version` répond `2.1.286 (Claude Code)` et
+ * `codex --version` répond `codex-cli 0.159.2`, aucun des deux ne tient dans
+ * un menu de 180px.
+ */
+export function shortVersion(version: string | undefined): string | undefined {
+  if (!version) return undefined;
+  const match = /\d+\.\d+\.\d+[\w.+-]*/.exec(version);
+  return match ? match[0] : undefined;
 }
 
 
@@ -48,6 +77,9 @@ interface AgentMenuProps {
  * de la fenêtre, et `modal={false}` empêche Radix de poser `pointer-events:
  * none` sur le document — sans quoi le survol de la ligne disparaît et
  * l'icône avec lui.
+ *
+ * Les entrées sont annotées de leur état réel (`1.18.33` ou une icône de
+ * téléchargement) : le contrôle de version tourne dans le serveur, en arrière-plan.
  */
 export function AgentMenu({ selected, onSelect }: AgentMenuProps): JSX.Element {
   const label = selected ? selected.label : 'Choose an AI agent';
@@ -56,6 +88,7 @@ export function AgentMenu({ selected, onSelect }: AgentMenuProps): JSX.Element {
   // le menu dès qu'on descendait choisir un provider.
   const [open, setOpen] = useState(false);
   const [tooltipOpen, setTooltipOpen] = useState(false);
+  const picker = useAgentPicker(onSelect);
 
   return (
     // <DropdownMenu> doit être l'ancêtre du <DropdownMenuTrigger> : c'est lui
@@ -116,17 +149,33 @@ export function AgentMenu({ selected, onSelect }: AgentMenuProps): JSX.Element {
         className="z-[9999] min-w-[180px] border-[#333] bg-[#252526] text-[#d4d4d4]
                    before:absolute before:-top-2 before:left-0 before:right-0 before:h-2 before:content-['']"
       >
-        {AI_PROVIDERS.map((provider) => (
-          <DropdownMenuItem
-            key={provider.id}
-            className="gap-2 text-[#d4d4d4] focus:bg-[#0e639c] focus:text-white"
-            onSelect={() => onSelect(provider)}
-          >
-            <ProviderIcon provider={provider} />
-            <span>{provider.label}</span>
-          </DropdownMenuItem>
-        ))}
+        {AI_PROVIDERS.map((provider) => {
+          const missing = picker.installed[provider.id] === false;
+          const version = missing ? undefined : shortVersion(picker.versions[provider.id]);
+          return (
+            <DropdownMenuItem
+              key={provider.id}
+              // Grisé seulement si le probe a formellement répondu « absent » :
+              // un statut encore inconnu laisse l'entrée à sa couleur normale,
+              // sinon un serveur lent ferait croire à un agent manquant.
+              className={`gap-2 text-[#d4d4d4] focus:bg-[#0e639c] focus:text-white ${
+                missing ? 'opacity-50' : ''
+              }`}
+              onSelect={() => picker.choose(provider)}
+            >
+              <ProviderIcon provider={provider} />
+              <span className="flex-1">{provider.label}</span>
+              {missing ? (
+                <Download className="h-3 w-3 shrink-0" aria-label="Not installed" />
+              ) : (
+                version && <span className="shrink-0 text-[10px] text-[#6f6f6f]">{version}</span>
+              )}
+            </DropdownMenuItem>
+          );
+        })}
       </DropdownMenuContent>
+
+      {picker.dialog}
     </DropdownMenu>
   );
 }

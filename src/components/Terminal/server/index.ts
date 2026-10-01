@@ -2,6 +2,8 @@ import fastify, { FastifyRequest } from 'fastify';
 import cors from '@fastify/cors';
 import { getCurrentDirectory, initializeDirectory } from './directoryService';
 import { attachPtyServer } from './ptyServer';
+import { getAgentStatuses, installAgent } from './agentProbe';
+import { findProvider } from '../config/aiProviders';
 import { SERVER_CONFIG } from '../config/serverConfig';
 import net from 'net';
 import fs from 'fs';
@@ -84,6 +86,28 @@ async function startServer() {
 
     app.get('/current-directory', async () => {
       return { currentDirectory: getCurrentDirectory() };
+    });
+
+    // Agents IA : quel binaire est réellement sur le PATH, et quelle version.
+    // Les sondes (`<binaire> --version`) tournent dans un execFile détaché, pas
+    // dans le PTY : rien n'apparaît dans une session, et le cache serveur évite
+    // de re-sonder à chaque ouverture de menu.
+    app.get('/agents', async () => {
+      return { agents: await getAgentStatuses() };
+    });
+
+    // Installation d'un agent absent. La commande est choisie par le client
+    // (il connaît l'OS affiché) mais validée contre le registre côté serveur :
+    // cette route ne peut donc pas exécuter une commande arbitraire.
+    app.post('/agents/install', async (request: FastifyRequest<{
+      Body: { id?: string; command?: string }
+    }>) => {
+      const { id, command } = request.body || {};
+      const provider = typeof id === 'string' ? findProvider(id) : undefined;
+      if (!provider || typeof command !== 'string') {
+        throw new Error('Unknown agent or missing install command');
+      }
+      return installAgent(provider, command);
     });
 
     // Upload d'un fichier glissé-déposé ou collé depuis le terminal
