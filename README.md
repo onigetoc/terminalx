@@ -191,6 +191,13 @@ the xterm buffer and **not** your page, even at the top or bottom of the scrollb
 enforced both in CSS (`overscroll-behavior: contain`) and with a `wheel` listener on the terminal
 container, because xterm drives scrolling in JavaScript. You do not need to do anything.
 
+### Fullscreen
+
+In fullscreen the terminal covers the viewport, but the host page would still show its scrollbar
+on top of it. While fullscreen is active the component sets `overflow: hidden` on
+`document.documentElement` (standard modal behaviour) and restores the previous value on exit.
+Outside fullscreen the page scrollbar is left untouched — your page still has to scroll.
+
 ### Lifecycle and page navigation
 
 - `handleToggleTerminal` exists only while `<Terminal />` is mounted, and is removed on unmount.

@@ -131,6 +131,20 @@ const Terminal: React.FC<TerminalProps> = ({ config = {}, onHeightChange }) => {
     onHeightChange(reported);
   }, [onHeightChange, isOpen, isFullscreen, isMinimized, height]);
 
+  // Plein écran : le terminal recouvre tout le viewport, mais la page hôte reste
+  // scrollable et sa barre de défilement se dessine par-dessus le terminal. On
+  // verrouille donc le scroll de `<html>` tant qu'on est en plein écran (comportement
+  // modal standard), puis on restaure la valeur précédente.
+  useEffect(() => {
+    if (!isFullscreen) return;
+    const root = document.documentElement;
+    const previous = root.style.overflow;
+    root.style.overflow = 'hidden';
+    return () => {
+      root.style.overflow = previous;
+    };
+  }, [isFullscreen]);
+
   const handleMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     if (!isFullscreen) {
       setIsDragging(true);
