@@ -104,9 +104,8 @@ const Index = () => {
 
       <Terminal
         onHeightChange={setTerminalHeight}
-        config={{
-          readOnlyMode: false,
-          initialState: 'open',
+config={{
+          showTerminal: true,
           defaultHeight: 340,
         }}
       />

@@ -46,10 +46,10 @@ export const handleToggleTerminal = () => {
 
 const Terminal: React.FC<TerminalProps> = ({ config = {}, onHeightChange }) => {
   const mergedConfig = { ...defaultConfig, ...config };
-  const [isOpen, setIsOpen] = useState(mergedConfig.initialState === 'open');
+  const [isOpen, setIsOpen] = useState(mergedConfig.initialState !== 'closed');
   const [isVisible, setIsVisible] = useState(true);
-  const [isFullscreen, setIsFullscreen] = useState(mergedConfig.startFullscreen);
-  const [isMinimized, setIsMinimized] = useState(mergedConfig.startMinimized);
+  const [isFullscreen, setIsFullscreen] = useState(mergedConfig.initialState === 'fullscreen');
+  const [isMinimized, setIsMinimized] = useState(mergedConfig.initialState === 'minimized');
   const [height, setHeight] = useState(mergedConfig.defaultHeight);
   const [isDragging, setIsDragging] = useState(false);
   const [currentDirectory, setCurrentDirectory] = useState('');
@@ -99,8 +99,9 @@ const Terminal: React.FC<TerminalProps> = ({ config = {}, onHeightChange }) => {
       setIsVisible(current.showTerminal);
     };
 
-    // Initialiser l'état avec la valeur actuelle
-    setIsVisible(terminalConfig.get().showTerminal);
+    // Le prop `config` est prioritaire au montage ; ensuite seul le singleton
+    // fait foi (window.handleToggleTerminal, terminalConfig.set…).
+    setIsVisible(mergedConfig.showTerminal);
 
     // S'abonner aux changements de configuration
     window.addEventListener('terminal-visibility-change', handleVisibilityChange);

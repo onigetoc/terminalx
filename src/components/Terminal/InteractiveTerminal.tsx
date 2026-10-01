@@ -33,8 +33,12 @@ export interface InteractiveTerminalProps {
    * pas mesurer un conteneur `display: none`.
    */
   visible?: boolean;
-  /** Notifie le parent du nombre d'occurrences trouvées par la recherche. */
-  onMatchCount?: (count: number) => void;
+  /**
+   * Notifie le parent du nombre d'occurrences trouvées par la recherche et de
+   * l'index (0-based) de l'occurrence active, pour le « X of Y ». `index` vaut
+   * -1 quand le nombre de correspondances dépasse la limite de surlignage.
+   */
+  onMatchCount?: (count: number, index: number) => void;
   /**
    * Commande à exécuter une fois le shell prêt. Permet de créer une session
    * déjà lancée sur un agent : au montage le PTY n'existe pas encore, la
@@ -65,7 +69,7 @@ export interface InteractiveTerminalHandle {
   write: (data: string) => void;
   focus: () => void;
   /** Cherche l'occurrence suivante (1) ou précédente (-1) dans le buffer. */
-  search: (term: string, direction: 1 | -1) => void;
+  search: (term: string, direction: 1 | -1, options?: TerminalSearchOptions) => void;
   /** Retire les surlignages de recherche. */
   clearSearch: () => void;
   /**
@@ -78,17 +82,45 @@ export interface InteractiveTerminalHandle {
   getSelection: () => string;
 }
 
+/** Options de recherche exposées au parent (les trois cases de VS Code). */
+export interface TerminalSearchOptions {
+  /** Match Case : comparaison sensible à la casse. */
+  caseSensitive: boolean;
+  /** Match Whole Word : le terme doit être un mot entier. */
+  wholeWord: boolean;
+  /** Use Regular Expression : le terme est une regex. */
+  regex: boolean;
+}
+
+/** Options par défaut : comme VS Code, la recherche est insensible à la casse. */
+export const DEFAULT_SEARCH_OPTIONS: TerminalSearchOptions = {
+  caseSensitive: false,
+  wholeWord: false,
+  regex: false
+};
+
 // Surlignages alignés sur le thème du terminal (comme VS Code) : gris pour les
 // occurrences, ambre pour celle qui est active.
-const SEARCH_OPTIONS: ISearchOptions = {
-  incremental: true,
-  decorations: {
-    matchBackground: '#3a3d41',
-    matchOverviewRuler: '#3a3d41',
-    activeMatchBackground: '#b8860b',
-    activeMatchColorOverviewRuler: '#b8860b'
-  }
+const SEARCH_DECORATIONS: NonNullable<ISearchOptions['decorations']> = {
+  matchBackground: '#3a3d41',
+  matchOverviewRuler: '#3a3d41',
+  activeMatchBackground: '#b8860b',
+  activeMatchColorOverviewRuler: '#b8860b'
 };
+
+/**
+ * Fusionne les cases cochées avec les decorations fixes. `onDidChangeResults`
+ * n'est émis que si `decorations` est présent : il alimente le compteur « X of Y ».
+ */
+function buildSearchOptions(options: TerminalSearchOptions): ISearchOptions {
+  return {
+    incremental: true,
+    caseSensitive: options.caseSensitive,
+    wholeWord: options.wholeWord,
+    regex: options.regex,
+    decorations: SEARCH_DECORATIONS
+  };
+}
 
 /**
  * Commandes internes du shell : elles ne lancent aucun processus, donc elles
@@ -224,11 +256,11 @@ export const InteractiveTerminal = forwardRef<InteractiveTerminalHandle, Interac
     const searchAddon = new SearchAddon();
     searchRef.current = searchAddon;
     term.loadAddon(searchAddon);
-    // `onDidChangeResults` n'est émis qu'avec les decorations activées, et
+    // `onDidChangeResults` n'est émis qu'avec les decorations activées.
     // `resultIndex` vaut -1 quand le nombre de correspondances dépasse la
     // limite de surlignage : on ne compte que dans ce cas.
     const resultsDisposable = searchAddon.onDidChangeResults(({ resultIndex, resultCount }) => {
-      onMatchCount?.(resultIndex === -1 ? 0 : resultCount);
+      onMatchCount?.(resultIndex === -1 ? 0 : resultCount, resultIndex);
     });
     // Affichage d'images inline (Sixel + protocole iTerm IIP), comme le
     // terminal intégré de VS Code : les outils CLI (opencode, etc.) qui
@@ -802,13 +834,14 @@ export const InteractiveTerminal = forwardRef<InteractiveTerminalHandle, Interac
     clear: () => termRef.current?.clear(),
     write: (data: string) => termRef.current?.write(data),
     focus: () => termRef.current?.focus(),
-    search: (searchTerm: string, direction: 1 | -1) => {
+    search: (searchTerm: string, direction: 1 | -1, options?: TerminalSearchOptions) => {
       const addon = searchRef.current;
       if (!addon || !searchTerm) return;
+      const searchOptions = buildSearchOptions(options ?? DEFAULT_SEARCH_OPTIONS);
       if (direction === -1) {
-        addon.findPrevious(searchTerm, SEARCH_OPTIONS);
+        addon.findPrevious(searchTerm, searchOptions);
       } else {
-        addon.findNext(searchTerm, SEARCH_OPTIONS);
+        addon.findNext(searchTerm, searchOptions);
       }
     },
     clearSearch: () => searchRef.current?.clearDecorations(),

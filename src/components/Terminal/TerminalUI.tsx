@@ -114,8 +114,9 @@ export function TerminalUI(props: TerminalUIProps): JSX.Element {
   // page doivent agir sur la session visible, pas sur la dernière montée.
   const terminalRefs = useRef(new Map<string, InteractiveTerminalHandle | null>());
   const [isSearchVisible, setIsSearchVisible] = useState(false);
-  // Compteur de correspondances par session (absent = jamais cherchée).
-  const [matchCounts, setMatchCounts] = useState<Record<string, number>>({});
+  // Compteur de correspondances par session (absent = jamais cherchée) :
+  // nombre total + index de l'occurrence active, pour le « X of Y ».
+  const [matchCounts, setMatchCounts] = useState<Record<string, { count: number; index: number }>>({});
   // Terme fourni à l'ouverture (sélection xterm), consommé par <TerminalSearch>.
   const [initialSearchText, setInitialSearchText] = useState('');
   // Élément hôte des surfaces flottantes du terminal (dialogues). Cf. TerminalOverlay.
@@ -125,7 +126,7 @@ export function TerminalUI(props: TerminalUIProps): JSX.Element {
   const activeSession = sessions.find((s) => s.id === activeSessionId);
   const activeTitle = activeSession?.title ?? BRAND_TITLE;
   const activeDirectory = activeSession?.cwd || props.currentDirectory;
-  const activeMatchCount = matchCounts[activeSessionId] ?? 0;
+  const activeMatch = matchCounts[activeSessionId] ?? { count: 0, index: -1 };
 
   // Ref "courante" : un objet getter mémoïsé, pour ne pas donner une nouvelle
   // identité à <TerminalSearch> (qui l'a en dépendance d'effet) à chaque rendu.
@@ -139,25 +140,9 @@ export function TerminalUI(props: TerminalUIProps): JSX.Element {
     [activeSessionId]
   );
 
-  // Ctrl+F est intercepté par InteractiveTerminal (il faut le court-circuit
-  // avant que xterm n'envoie la frappe au shell). Ici on ne gère qu'Escape
-  // pour fermer la barre, y compris quand le focus est déjà dedans.
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && isSearchVisible) {
-        e.preventDefault();
-        e.stopPropagation();
-        setIsSearchVisible(false);
-      }
-    };
-
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [isSearchVisible]);
-
   const handleMatchCount = useCallback(
-    (id: string) => (count: number) => {
-      setMatchCounts((prev) => ({ ...prev, [id]: count }));
+    (id: string) => (count: number, index: number) => {
+      setMatchCounts((prev) => ({ ...prev, [id]: { count, index } }));
     },
     []
   );
@@ -195,6 +180,11 @@ export function TerminalUI(props: TerminalUIProps): JSX.Element {
       setInitialSearchText('');
     }
     setIsSearchVisible(true);
+    // Barre déjà ouverte : l'effet ci-dessus ne se relance pas (isVisible
+    // inchangé), donc on redonne explicitement le focus à l'input. Sans
+    // sélection, le terme déjà saisi est conservé et resélectionné. Barre
+    // fermée : `focus` ne fait rien (input pas monté), l'effet s'en charge.
+    searchRef.current?.focus();
   }, [terminalRef]);
 
   const handleCloseSearch = useCallback(() => {
@@ -203,6 +193,25 @@ export function TerminalUI(props: TerminalUIProps): JSX.Element {
     // n'atteignent plus le shell.
     terminalRef.current?.focus();
   }, [terminalRef]);
+
+  // Escape ferme la barre, où que soit le focus : dans l'input, sur un bouton
+  // de la barre, ou sur le terminal lui-même (auquel cas xterm enverrait sinon
+  // ESC au shell). Phase capture : l'input appelle `stopImmediatePropagation`
+  // pour empêcher les frappes d'atteindre le shell, ce qui bloquerait un
+  // écouteur en phase bubble.
+  useEffect(() => {
+    if (!isSearchVisible) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      e.preventDefault();
+      e.stopPropagation();
+      handleCloseSearch();
+    };
+
+    document.addEventListener('keydown', handleKeyDown, true);
+    return () => document.removeEventListener('keydown', handleKeyDown, true);
+  }, [isSearchVisible, handleCloseSearch]);
 
   const tooltipStyle = "bg-[#252526] text-[#d4d4d4] border border-[#333] shadow-md";
 
@@ -344,7 +353,8 @@ export function TerminalUI(props: TerminalUIProps): JSX.Element {
               isVisible={isSearchVisible}
               onClose={handleCloseSearch}
               terminalRef={terminalRef}
-              matchCount={activeMatchCount}
+              matchCount={activeMatch.count}
+              matchIndex={activeMatch.index}
               initialTerm={initialSearchText}
             />
             {sessions.map((session) => {

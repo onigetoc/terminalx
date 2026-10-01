@@ -4,32 +4,8 @@
   height: 1.2em; /* Increase size */
 }
 
-/* Styles pour la fenêtre de recherche */
-.search-container {
-  border: 1px solid #333;
-  border-radius: 6px;
-  background: transparent;
-  transition: opacity 0.2s ease-in-out;
-  z-index: 50;
-}
-
-.search-container input {
-  flex: 1;
-  border: 1px solid #404040;
-  color: #d1d5db;
-  padding: 4px 8px;
-  border-radius: 2px;
-  outline: none;
-  font-size: 12px;
-}
-
-.search-container input:focus {
-  border-color: #007fd4;
-}
-
-.search-container input::placeholder {
-  color: #666;
-}
+/* La fenêtre de recherche est stylée en Tailwind dans TerminalSearch.tsx ;
+   ces règles CSS lui ajoutaient un second contour autour de l'input. */
 
 /* Ensure the terminal window has relative positioning */
 .terminal-window {

@@ -1,7 +1,10 @@
 // Terminal configuration type
 export type TerminalConfig = {
-  initialState: 'open' | 'closed' | 'hidden';
-  startFullscreen: boolean;
+  /**
+   * État de la fenêtre au montage. `'fullscreen'` et `'minimized'` ouvrent le
+   * terminal dans ce mode ; `'closed'` n'affiche que le bouton flottant.
+   */
+  initialState: 'open' | 'fullscreen' | 'minimized' | 'closed';
   defaultHeight: number;
   minHeight: number;
   minWidth: number;
@@ -9,8 +12,6 @@ export type TerminalConfig = {
   fontFamily: string;
   /** Lignes conservées dans le scrollback xterm. */
   scrollbackLimit: number;
-  startMinimized: boolean;
-  showFloatingButton: boolean;
   showTerminal: boolean;
   readOnlyMode: boolean;
 };
@@ -18,10 +19,7 @@ export type TerminalConfig = {
 export const defaultConfig: TerminalConfig = {
   initialState: 'open',
   readOnlyMode: false,
-  startFullscreen: false,
-  showFloatingButton: true,
   showTerminal: true,
-  startMinimized: false,
   defaultHeight: 340,
   minHeight: 200,
   minWidth: 300,

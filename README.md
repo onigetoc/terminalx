@@ -131,15 +131,13 @@ Options accepted by the `config` prop (see `src/components/Terminal/config/termi
 
 | Option | Type | Default | Description |
 |---|---|---|---|
-| `initialState` | `'open' \| 'closed' \| 'hidden'` | `'open'` | Whether the window starts open |
-| `startFullscreen` | `boolean` | `false` | Start fullscreen |
-| `startMinimized` | `boolean` | `false` | Start collapsed to the title bar |
-| `defaultHeight` | `number` | `340` | Window height in px |
+| `initialState` | `'open' \| 'fullscreen' \| 'minimized' \| 'closed'` | `'open'` | State of the window on mount. `'closed'` shows only the floating button |
+| `defaultHeight` | `number` | `340` | Window height in px, and the height restored when leaving fullscreen |
 | `minHeight` | `number` | `200` | Minimum height when dragging |
 | `fontSize` | `number` | `14` | Font size |
 | `fontFamily` | `string` | `'monospace'` | Font family |
 | `scrollbackLimit` | `number` | `1000` | Lines kept in the xterm scrollback |
-| `showTerminal` | `boolean` | `true` | Set false to hide the terminal entirely |
+| `showTerminal` | `boolean` | `true` | Set false to hide the terminal entirely (read on mount only; afterwards use `window.handleToggleTerminal()`) |
 | `readOnlyMode` | `boolean` | `false` | Hides the toolbar, cwd bar and footer |
 
 ## Keyboard shortcuts
