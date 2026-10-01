@@ -55,6 +55,30 @@ interface ShellDefinition {
 }
 
 /**
+ * Script PowerShell injecté au lancement du shell. Il enveloppe la fonction
+ * `prompt` pour émettre la séquence OSC 7 (`ESC ] 7 ; file://hote/chemin BEL`)
+ * à chaque invite, sans écraser le prompt d'origine.
+ *
+ * C'est la source de vérité du répertoire courant : le client lit le vrai cwd
+ * du shell (xterm `registerOscHandler(7)`) au lieu de le deviner d'après les
+ * `cd` tapés. Cette devinette se désynchronisait dès qu'un `cd` relatif suivait
+ * un `cd` absolu non capté, et le pied de page affichait un chemin inexistant
+ * (`C:/terminalx2`).
+ */
+const PS_OSC7_PROMPT = String.raw`$__txOriginalPrompt = $function:prompt; function global:prompt { $__txCwd = $ExecutionContext.SessionState.Path.CurrentLocation.ProviderPath; if ($__txCwd) { Write-Host -NoNewline ([char]27 + ']7;file://' + $env:COMPUTERNAME + '/' + ($__txCwd -replace '\\','/') + [char]7) }; & $__txOriginalPrompt }`;
+
+/** `-EncodedCommand` évite toute devinette de quoting d'args sur Windows. */
+const POWERSHELL_ARGS = [
+  '-NoLogo',
+  '-NoExit',
+  '-EncodedCommand',
+  Buffer.from(PS_OSC7_PROMPT, 'utf16le').toString('base64')
+];
+
+/** Le binaire résolu est-il un PowerShell ? (sinon, args neutres) */
+const isPowerShell = (shell: string) => /(?:^|[\\/])(?:powershell|pwsh)(?:\.exe)?$/i.test(shell);
+
+/**
  * Choisit un shell adapté à la plateforme. Surchargeable via INTERACTIVE_SHELL.
  *
  * `preferred` vient du menu « + » du client : sous Windows, 'powershell' ou
@@ -67,14 +91,12 @@ function resolveShell(preferred?: string): ShellDefinition {
       return { shell: 'cmd.exe', args: [] };
     }
     if (preferred === 'powershell') {
-      return { shell: 'powershell.exe', args: ['-NoLogo'] };
+      return { shell: 'powershell.exe', args: POWERSHELL_ARGS };
     }
     // PowerShell est plus confortable qu'un cmd.exe brut pour un dev, mais on
     // laisse la possibilité de forcer avec INTERACTIVE_SHELL=cmd.exe
-    return {
-      shell: process.env.INTERACTIVE_SHELL || 'powershell.exe',
-      args: ['-NoLogo']
-    };
+    const shell = process.env.INTERACTIVE_SHELL || 'powershell.exe';
+    return { shell, args: isPowerShell(shell) ? POWERSHELL_ARGS : [] };
   }
 
   if (preferred === 'zsh') {
@@ -94,6 +116,8 @@ export function attachPtyServer(server: HttpServer): WebSocketServer {
   wss.on('connection', (ws: WebSocket) => {
     let shellProcess: pty.IPty | null = null;
     let spawned = false;
+    /** Le client a au moins tenté un spawn : le handshake ne doit plus rattraper. */
+    let spawnAttempted = false;
     let handshakeTimer: NodeJS.Timeout | null = null;
     // --- Détection du processus au premier plan ---------------------------
     // Le client signale une validation de ligne (`watch`). On cherche alors un
@@ -187,7 +211,13 @@ export function attachPtyServer(server: HttpServer): WebSocketServer {
       if (spawned) return;
 
       const { shell, args } = resolveShell(opts.shell);
-      const cwd = opts.cwd || getCurrentDirectory();
+      // node-pty refuse un `cwd` en forward slashes sous Windows (« error code:
+      // 267 »). Le client envoie déjà le chemin natif, mais un onglet resté
+      // ouvert avant le correctif enverrait encore la forme normalisée : on
+      // convertit ici plutôt que de laisser le spawn échouer.
+      const cwd =
+        (opts.cwd && process.platform === 'win32' ? opts.cwd.replace(/\//g, '\\') : opts.cwd) ||
+        getCurrentDirectory();
 
       try {
         shellProcess = pty.spawn(shell, args, {
@@ -250,6 +280,12 @@ export function attachPtyServer(server: HttpServer): WebSocketServer {
       if (!msg || typeof msg.type !== 'string') return;
 
       if (msg.type === 'spawn') {
+        // On note la tentative même si elle échoue : le timer de handshake ne
+        // doit surtout pas la recouvrir, sinon un spawn invalide (cwd fantôme,
+        // shell introuvable) était suivi 2 s plus tard d'un shell de secours
+        // dans le dossier par défaut, sans que l'utilisateur comprenne pourquoi
+        // il s'était retrouvé ailleurs.
+        spawnAttempted = true;
         spawnShell({ cols: msg.cols, rows: msg.rows, cwd: msg.cwd, shell: msg.shell });
         return;
       }
@@ -298,9 +334,12 @@ export function attachPtyServer(server: HttpServer): WebSocketServer {
     ws.on('error', cleanup);
 
     // Si le client n'envoie pas de premier message 'spawn' (client trop ancien
-    // ou déconnecté), on lance quand même un shell par sécurité.
+    // ou déconnecté), on lance quand même un shell par sécurité. Jamais après une
+    // tentative de spawn : l'erreur a déjà été renvoyée à l'utilisateur, la
+    // recouvrir par un shell de secours l'aurait launché dans le mauvais dossier
+    // sans explication.
     handshakeTimer = setTimeout(() => {
-      if (!spawned) {
+      if (!spawned && !spawnAttempted) {
         spawnShell({ cols: 80, rows: 24 });
       }
     }, 2000);

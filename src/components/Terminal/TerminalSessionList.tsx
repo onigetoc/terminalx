@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { Trash2, Terminal as TerminalIcon } from 'lucide-react';
 import { AgentMenu } from './AgentMenu';
-import type { AiProvider } from './config/aiProviders';
+import { findProvider, type AiProvider } from './config/aiProviders';
 import type { ShellKind } from './InteractiveTerminal';
 import { detectOsKind, shellTitle } from './config/shellProfiles';
 
@@ -15,6 +15,15 @@ export interface TerminalSession {
   restartKey: number;
   /** Répertoire courant réel de la session (suit ses `cd`). */
   cwd?: string;
+  /**
+   * Id d'agent (`AI_PROVIDERS`) lancé dans cette session ; absent = shell nu.
+   *
+   * Source de vérité unique pour la marque affichée dans la ligne du panneau.
+   * Avant, l'icône vivait dans un `useState` du panneau, alimenté uniquement par
+   * le clic sur le bot : une session née de « Select a Profile » avait bien son
+   * agent, mais le panneau n'en savait rien et affichait l'icône neutre.
+   */
+  agentId?: string;
   /**
    * Commande à taper dès que le shell répond. Utilisé quand la session est
    * née d'un choix d'agent : au montage le PTY n'existe pas encore, la
@@ -33,8 +42,8 @@ interface TerminalSessionListProps {
   activeId: string;
   onSelect: (id: string) => void;
   onClose: (id: string) => void;
-  /** Lance la commande de l'agent choisi dans le PTY de la session. */
-  onLaunchAgent: (id: string, command: string) => void;
+  /** Lance l'agent choisi dans le PTY de la session et mémorise sa marque. */
+  onLaunchAgent: (id: string, agent: AiProvider) => void;
 }
 
 /**
@@ -47,16 +56,12 @@ interface TerminalSessionListProps {
  */
 export function TerminalSessionList(props: TerminalSessionListProps): JSX.Element {
   const { sessions, activeId } = props;
-  // Agent retenu par session : l'icône reprend sa marque. Cléé par session pour
-  // que chaque panneau garde son propre choix.
-  const [agents, setAgents] = useState<Record<string, AiProvider>>({});
 
-  const launchAgent = (sessionId: string) => (provider: AiProvider) => {
-    setAgents((prev) => ({ ...prev, [sessionId]: provider }));
+  const launchAgent = (sessionId: string) => (agent: AiProvider) => {
     // On affiche la session avant de taper : xterm ne peut pas écrire dans un
     // conteneur masqué sans refit.
     if (sessionId !== activeId) props.onSelect(sessionId);
-    props.onLaunchAgent(sessionId, provider.command);
+    props.onLaunchAgent(sessionId, agent);
   };
 
   return (
@@ -64,6 +69,9 @@ export function TerminalSessionList(props: TerminalSessionListProps): JSX.Elemen
       <div className="terminal-session-list py-1">
         {sessions.map((session) => {
           const isActive = session.id === activeId;
+          // La marque vient de la session elle-même : les deux chemins de choix
+          // d'agent (« Select a Profile » et le bot de la ligne) convergent ici.
+          const agent = session.agentId ? findProvider(session.agentId) : undefined;
           return (
             <div
               key={session.id}
@@ -92,7 +100,7 @@ export function TerminalSessionList(props: TerminalSessionListProps): JSX.Elemen
                   le survol. Le bouton reste atteignable au clavier (`focus-visible`
                   le révèle) : la corbeille est une action destructive, elle ne doit
                   pas disparaître pour qui navigue au clavier. */}
-              <AgentMenu selected={agents[session.id]} onSelect={launchAgent(session.id)} />
+              <AgentMenu selected={agent} onSelect={launchAgent(session.id)} />
               {sessions.length > 1 && (
                 <button
                   type="button"

@@ -11,6 +11,7 @@ import '@/components/Terminal/styles/terminal.css';
 import { TerminalUI } from './TerminalUI';
 import { TerminalConfig, defaultConfig, terminalConfig } from '@/components/Terminal/config/terminalConfig';
 import type { ShellKind } from './InteractiveTerminal';
+import type { AiProvider } from './config/aiProviders';
 import { defaultSessionTitle, type TerminalSession } from './TerminalSessionList';
 import {
   BRAND_TITLE,
@@ -20,8 +21,7 @@ import {
 } from './config/shellProfiles';
 import {
   initializeDirectory,
-  setWorkingDirectory,
-  updateStoredDirectory
+  setWorkingDirectory
 } from './utils/directoryUtils';
 
 interface TerminalProps {
@@ -160,11 +160,12 @@ const Terminal: React.FC<TerminalProps> = ({ config = {} }) => {
     );
   }, []);
 
-  const handleCreateSession = useCallback((shell: ShellKind, pendingCommand?: string) => {
+  const handleCreateSession = useCallback((shell: ShellKind, agent?: AiProvider) => {
     const id = nextSessionId();
     // Le nom reprend d'abord le profil choisi ; il sera remplacé par la
-    // commande dès que l'utilisateur en lancera une. Avec un agent, le nom est
-    // déjà connu : on l'affiche tout de suite.
+    // commande dès que l'utilisateur en lancera une.
+    // `agentId` voyage avec la session : c'est lui qui donne sa marque à la ligne
+    // du panneau, quelle que soit la façon dont l'agent a été choisi.
     setSessions((prev) => [
       ...prev,
       {
@@ -172,7 +173,8 @@ const Terminal: React.FC<TerminalProps> = ({ config = {} }) => {
         shell,
         title: defaultSessionTitle(shell),
         restartKey: 0,
-        pendingCommand
+        agentId: agent?.id,
+        pendingCommand: agent?.command
       }
     ]);
     setActiveSessionId(id);
@@ -203,10 +205,17 @@ const Terminal: React.FC<TerminalProps> = ({ config = {} }) => {
   // peut tourner un programme : on la relance (restartKey ++) pour obtenir un
   // shell propre, et on programme la commande, qui partira au prochain `ready`.
   // Même mécanisme que le bouton Kill, mais ciblé sur la session visée.
-  const handleLaunchAgent = useCallback((id: string, command: string) => {
+  const handleLaunchAgent = useCallback((id: string, agent: AiProvider) => {
     setSessions((prev) =>
       prev.map((session) =>
-        session.id === id ? { ...session, restartKey: session.restartKey + 1, pendingCommand: command } : session
+        session.id === id
+          ? {
+              ...session,
+              restartKey: session.restartKey + 1,
+              agentId: agent.id,
+              pendingCommand: agent.command
+            }
+          : session
       )
     );
   }, []);
@@ -258,7 +267,6 @@ const Terminal: React.FC<TerminalProps> = ({ config = {} }) => {
       // on demande au serveur de s'y positionner.
       const directory = await setWorkingDirectory(directoryHandle.name);
       setCurrentDirectory(directory);
-      updateStoredDirectory(directory);
       // Les shells déjà lancés gardent leur propre cwd : on les redémarre pour
       // qu'ils démarrent dans le nouveau dossier.
       restartAllSessions();

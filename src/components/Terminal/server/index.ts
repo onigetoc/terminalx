@@ -88,6 +88,13 @@ async function startServer() {
       return { currentDirectory: getCurrentDirectory() };
     });
 
+    // Dossier par défaut du serveur : le home de l'utilisateur, selon l'OS.
+    // Le client s'y repositionne à chaque ouverture ; on ne mémorise jamais le
+    // dossier d'une session. L'ouverture est donc déterministe.
+    app.get('/default-directory', async () => {
+      return { defaultDirectory: os.homedir() };
+    });
+
     // Agents IA : quel binaire est réellement sur le PATH, et quelle version.
     // Les sondes (`<binaire> --version`) tournent dans un execFile détaché, pas
     // dans le PTY : rien n'apparaît dans une session, et le cache serveur évite

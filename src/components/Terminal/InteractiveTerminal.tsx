@@ -6,7 +6,8 @@ import { SearchAddon, type ISearchOptions } from '@xterm/addon-search';
 import '@xterm/xterm/css/xterm.css';
 import { getServerUrl } from './config/serverConfig';
 import { terminalConfig } from './config/terminalConfig';
-import { resolveDirectoryCommand, formatPath } from './utils/directoryUtils';
+import { resolveDirectoryCommand, formatPath, toNativePath } from './utils/directoryUtils';
+import { detectOsKind } from './config/shellProfiles';
 import './styles/terminal.css';
 
 export type ShellKind = 'default' | 'powershell' | 'cmd' | 'bash' | 'zsh';
@@ -88,6 +89,39 @@ const SEARCH_OPTIONS: ISearchOptions = {
     activeMatchColorOverviewRuler: '#b8860b'
   }
 };
+
+/**
+ * Commandes internes du shell : elles ne lancent aucun processus, donc elles
+ * ne doivent JAMAIS renommer la session (contrairement à `node`, `bun`,
+ * `opencode`…). Filet de sécurité client, en plus de la détection serveur.
+ */
+const SHELL_BUILTINS = new Set([
+  'cd', 'chdir', 'sl', 'set-location', 'pushd', 'popd',
+  'dir', 'ls', 'gci', 'pwd', 'echo', 'cls', 'clear', 'help', 'history',
+  'set', 'export', 'alias', 'type', 'where', 'which'
+]);
+
+/**
+ * Décode la charge OSC 7 émise par le shell (`file://hote/chemin`) : c'est le
+ * vrai répertoire courant du shell. Il remplace la devinette basée sur le `cd`
+ * tapé, qui se désynchronisait et pouvait produire un chemin inexistant.
+ *
+ * Renvoie `null` si la charge n'est pas exploitable ; le handler OSC doit
+ * toujours consommer la séquence pour ne pas la laisser s'afficher.
+ */
+function parseOsc7(data: string): string | null {
+  const match = /^file:\/\/[^/]*(\/.*)$/.exec(data);
+  if (!match) return null;
+  let path = match[1];
+  try {
+    path = decodeURIComponent(path);
+  } catch {
+    /* laisse le chemin brut si l'encodage est invalide */
+  }
+  // Windows : file://hote/C:/Users/... → C:/Users/...
+  if (/^\/[a-zA-Z]:\//.test(path)) path = path.slice(1);
+  return path.replace(/\\/g, '/');
+}
 
 /**
  * Terminal interactif basé sur xterm.js + un pseudo-terminal côté serveur.
@@ -213,6 +247,20 @@ export const InteractiveTerminal = forwardRef<InteractiveTerminalHandle, Interac
     });
     term.loadAddon(imageAddon);
     term.open(container);
+
+    // Le shell émet OSC 7 à chaque prompt (voir la surcharge de `prompt` côté
+    // serveur) : c'est le vrai cwd, la seule source de vérité. Dès le premier
+    // OSC reçu, on cesse de deviner d'après le `cd` tapé — cette devinette
+    // pouvait afficher un chemin faux (ex. `C:/terminalx2`).
+    let osc7Seen = false;
+    const osc7Handler = term.parser.registerOscHandler(7, (data) => {
+      const directory = parseOsc7(data);
+      if (!directory) return true;
+      osc7Seen = true;
+      console.info('[terminal-cwd] OSC7 ->', directory);
+      onDirectoryChangeRef.current?.(directory);
+      return true;
+    });
 
     let disposed = false;
     let socket: WebSocket | null = null;
@@ -511,7 +559,11 @@ export const InteractiveTerminal = forwardRef<InteractiveTerminalHandle, Interac
               type: 'spawn',
               cols: term.cols,
               rows: term.rows,
-              cwd: cwdRef.current,
+              // node-pty est strict sur les séparateurs : on renvoie le chemin
+              // dans la syntaxe du serveur, pas la forme normalisée pour
+              // l'affichage. Sinon le spawn échoue en 267 et la session retombe
+              // sur le dossier par défaut du serveur.
+              cwd: toNativePath(cwdRef.current, detectOsKind()) || undefined,
               shell: shellRef.current
             });
           };
@@ -615,16 +667,24 @@ export const InteractiveTerminal = forwardRef<InteractiveTerminalHandle, Interac
           const command = lineBuffer.replace(/\s+/g, ' ').trim();
           lineBuffer = '';
           if (command) {
+            console.info('[terminal-input]', JSON.stringify(command), 'running:', running, 'osc7Seen:', osc7Seen);
             // Un `cd` change le répertoire courant de cette session : on le
             // résout pour le pied de page. Seulement au prompt (pas dans un TUI,
-            // où la ligne tapée n'est pas une commande shell).
-            if (!running) {
+            // où la ligne tapée n'est pas une commande shell) et seulement si le
+            // shell n'annonce pas déjà son vrai cwd via OSC 7 (PowerShell).
+            if (!running && !osc7Seen) {
               const nextDir = resolveDirectoryCommand(command, cwdRef.current || '');
-              if (nextDir) onDirectoryChangeRef.current?.(nextDir);
+              if (nextDir) {
+                console.info('[terminal-cwd] typed cd ->', nextDir, '| base:', cwdRef.current);
+                onDirectoryChangeRef.current?.(nextDir);
+              }
             }
             // On demande au serveur de regarder. `syncTitle` est rappelé par la
-            // réponse `running`, donc inutile de l'appeler ici.
-            pendingCommand = command.split(' ')[0];
+            // réponse `running`, donc inutile de l'appeler ici. Un builtin
+            // (`cd`, `dir`…) ne renomme pas : `pendingCommand` reste `null`
+            // jusqu'à ce que le serveur confirme un vrai processus.
+            const firstWord = command.split(' ')[0];
+            pendingCommand = SHELL_BUILTINS.has(firstWord.toLowerCase()) ? null : firstWord;
             send({ type: 'watch' });
           }
           continue;
@@ -682,6 +742,7 @@ export const InteractiveTerminal = forwardRef<InteractiveTerminalHandle, Interac
       dataDisposable.dispose();
       resizeDisposable.dispose();
       resultsDisposable.dispose();
+      osc7Handler.dispose();
       resizeObserver.disconnect();
       try {
         imageAddon.dispose();

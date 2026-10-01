@@ -1,13 +1,31 @@
 import { getServerUrl } from '../config/serverConfig';
-
-/** Clé localStorage du dernier dossier de travail choisi. */
-const STORED_DIRECTORY_KEY = 'terminalDirectory';
+import type { OsKind } from '../config/shellProfiles';
 
 /**
  * Normalise un chemin en remplaçant les backslashes par des forward slashes.
+ *
+ * Pour l'affichage et la comparaison seulement — voir `toNativePath`.
  */
 export function formatPath(path: string): string {
   return path?.replace(/\\/g, '/') || '';
+}
+
+/**
+ * Convertit un chemin `formatPath` dans la syntaxe du système qui héberge le
+ * PTY. À n'utiliser qu'au moment d'envoyer un `cwd` à node-pty.
+ *
+ * `formatPath` uniformise tout en `/`, mais node-pty est strict sous Windows :
+ * un `cwd` en `D:/projet/src` fait échouer le spawn avec « Cannot create
+ * process, error code: 267 » (répertoire inexistant). La session retombait alors
+ * sur le dossier par défaut du serveur — un changement d'agent suffisait à
+ * perdre le répertoire de travail.
+ *
+ * Un simple remplacement suffit, et il gère l'UNC : `//serveur/partage` devient
+ * `\\serveur\partage`.
+ */
+export function toNativePath(path: string | undefined, os: OsKind): string {
+  if (!path) return '';
+  return os === 'windows' ? path.replace(/\//g, '\\') : path;
 }
 
 /**
@@ -27,29 +45,20 @@ export async function setWorkingDirectory(directory: string): Promise<string> {
 }
 
 /**
- * Répertoire de travail de la session PTY.
- * 1. Le dossier mémorisé dans localStorage, s'il existe encore.
- * 2. Sinon, le répertoire courant du serveur.
+ * Répertoire de travail au démarrage : toujours le dossier par défaut de
+ * l'utilisateur (home de l'OS du serveur). Aucun dossier visité par une session
+ * n'est mémorisé — l'ouverture est déterministe. Chaque session garde ensuite
+ * son propre cwd en mémoire tant que la page est ouverte.
  */
 export async function initializeDirectory(): Promise<string> {
-  const storedDirectory = localStorage.getItem(STORED_DIRECTORY_KEY);
-  if (storedDirectory) {
-    try {
-      return await setWorkingDirectory(storedDirectory);
-    } catch (error) {
-      // Dossier supprimé ou serveur indisponible : on repart du défaut.
-      console.warn('Stored directory is no longer reachable, falling back:', error);
-    }
-  }
-
   try {
     const API_URL = await getServerUrl();
-    const response = await fetch(`${API_URL}/current-directory`);
-    if (!response.ok) throw new Error('Failed to get current directory');
+    const response = await fetch(`${API_URL}/default-directory`);
+    if (!response.ok) throw new Error('Failed to get default directory');
     const data = await response.json();
-    return formatPath(data.currentDirectory);
+    return await setWorkingDirectory(data.defaultDirectory);
   } catch (error) {
-    console.warn('Failed to get current directory, using fallback:', error);
+    console.warn('Failed to get default directory:', error);
     return '';
   }
 }
@@ -89,16 +98,4 @@ function resolvePath(cwd: string, target: string): string {
     parts.push(segment);
   }
   return root + parts.join('/');
-}
-
-/**
- * Mémorise le dossier de travail pour les prochaines sessions.
- */
-export function updateStoredDirectory(newDirectory: string): void {
-  if (!newDirectory) return;
-  try {
-    localStorage.setItem(STORED_DIRECTORY_KEY, formatPath(newDirectory));
-  } catch (error) {
-    console.error('Failed to update stored directory:', error);
-  }
 }

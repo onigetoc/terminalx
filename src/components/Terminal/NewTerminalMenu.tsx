@@ -14,15 +14,15 @@ import { ChevronDown, Download, Plus, Sparkles } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { ProviderIcon, shortVersion } from './AgentMenu';
 import { useAgentPicker } from './useAgentPicker';
-import { AI_PROVIDERS } from './config/aiProviders';
+import { AI_PROVIDERS, type AiProvider } from './config/aiProviders';
 import type { ShellKind } from './InteractiveTerminal';
 import { detectOsKind, defaultShellFor, shellProfilesFor } from './config/shellProfiles';
 
 const TOOLTIP = 'bg-[#252526] text-[#d4d4d4] border border-[#333] shadow-md';
 
 interface NewTerminalMenuProps {
-  /** `pendingCommand` non vide = la session naît déjà lancée sur l'agent. */
-  onCreate: (shell: ShellKind, pendingCommand?: string) => void;
+  /** `agent` non vide = la session naît déjà lancée sur cet agent. */
+  onCreate: (shell: ShellKind, agent?: AiProvider) => void;
 }
 
 /**
@@ -37,7 +37,7 @@ export function NewTerminalMenu({ onCreate }: NewTerminalMenuProps): JSX.Element
   const os = detectOsKind();
   const profiles = shellProfilesFor(os);
   const defaultShell = defaultShellFor(os);
-  const picker = useAgentPicker((provider) => onCreate(defaultShell, provider.command));
+  const picker = useAgentPicker((agent) => onCreate(defaultShell, agent));
 
   return (
     // Le <DropdownMenu> doit être l'ancêtre du <DropdownMenuTrigger> : le root

@@ -24,6 +24,7 @@ import {
 import { TerminalSessionList, type TerminalSession } from './TerminalSessionList';
 import { NewTerminalMenu } from './NewTerminalMenu';
 import { TerminalOverlayHostContext } from './TerminalOverlay';
+import type { AiProvider } from './config/aiProviders';
 import { BRAND_TITLE } from './config/shellProfiles';
 
 interface TerminalUIProps {
@@ -38,7 +39,7 @@ interface TerminalUIProps {
   sessions: TerminalSession[];
   activeSessionId: string;
   onSelectSession: (id: string) => void;
-  onCreateSession: (shell: ShellKind, pendingCommand?: string) => void;
+  onCreateSession: (shell: ShellKind, agent?: AiProvider) => void;
   onCloseSession: (id: string) => void;
   /** Un processus a démarré (titre) ou s'est arrêté (null = nom du shell). */
   onSessionTitle: (id: string, title: string | null) => void;
@@ -50,7 +51,7 @@ interface TerminalUIProps {
    * Relance une session précise avec un shell neuf et y lance un agent. Le
    * panneau des sessions s'en sert quand un programme tourne déjà.
    */
-  onLaunchAgent: (id: string, command: string) => void;
+  onLaunchAgent: (id: string, agent: AiProvider) => void;
   /** Vide la `pendingCommand` d'une session une fois injectée dans le shell. */
   onCommandConsumed: (id: string) => void;
   setIsOpen: (val: boolean) => void;
