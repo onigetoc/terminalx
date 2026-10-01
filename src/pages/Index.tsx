@@ -1,8 +1,13 @@
+import { useState } from "react";
 import Terminal from "@/components/Terminal/Terminal";
 
 const Index = () => {
+  // Hauteur du terminal rapportée par le composant : la démo réserve cet
+  // espace sous son propre contenu pour que le terminal ne le recouvre pas.
+  const [terminalHeight, setTerminalHeight] = useState(0);
+
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background" style={{ paddingBottom: terminalHeight }}>
       <div className="container mx-auto p-4">
         <h1 className="text-4xl font-bold mb-4">TerminalX Demo</h1>
         <p className="text-lg text-muted-foreground mb-4">
@@ -98,6 +103,7 @@ const Index = () => {
       </div>
 
       <Terminal
+        onHeightChange={setTerminalHeight}
         config={{
           readOnlyMode: false,
           initialState: 'open',

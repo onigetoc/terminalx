@@ -26,6 +26,13 @@ import {
 
 interface TerminalProps {
   config?: Partial<TerminalConfig>;
+  /**
+   * Hauteur occupée par le terminal en bas du viewport (0 si fermé ou
+   * plein écran, 40 si minimisé). L'hôte s'en sert pour réserver l'espace et
+   * éviter que le terminal recouvre le bas de sa page. Le terminal ne touche
+   * jamais au layout de l'hôte : il ne fait que rapporter sa hauteur.
+   */
+  onHeightChange?: (height: number) => void;
 }
 
 /** Compteur d'identifiants pour les sessions, sans dépendre d'une lib d'uuid. */
@@ -37,7 +44,7 @@ export const handleToggleTerminal = () => {
   terminalConfig.toggleVisibility();
 };
 
-const Terminal: React.FC<TerminalProps> = ({ config = {} }) => {
+const Terminal: React.FC<TerminalProps> = ({ config = {}, onHeightChange }) => {
   const mergedConfig = { ...defaultConfig, ...config };
   const [isOpen, setIsOpen] = useState(mergedConfig.initialState === 'open');
   const [isVisible, setIsVisible] = useState(true);
@@ -115,6 +122,14 @@ const Terminal: React.FC<TerminalProps> = ({ config = {} }) => {
       }
     };
   }, []);
+
+  // Rapporte la hauteur occupée au bas du viewport pour que l'hôte réserve
+  // l'espace. Fermé ou plein écran : 0 ; minimisé : la seule barre du haut.
+  useEffect(() => {
+    if (!onHeightChange) return;
+    const reported = !isOpen ? 0 : isFullscreen ? 0 : isMinimized ? 40 : height;
+    onHeightChange(reported);
+  }, [onHeightChange, isOpen, isFullscreen, isMinimized, height]);
 
   const handleMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     if (!isFullscreen) {

@@ -56,6 +56,28 @@ Toggle the window from anywhere, no import needed:
 
 `handleToggleTerminal` is registered on mount and removed on unmount.
 
+The window is `position: fixed` at the bottom of the viewport, so it covers whatever sits
+underneath. Give the component a way to report its height and reserve that space in your page:
+
+```jsx
+import { useState } from "react";
+import Terminal from "@/components/Terminal/Terminal";
+
+const App = () => {
+  const [terminalHeight, setTerminalHeight] = useState(0);
+  return (
+    <div style={{ paddingBottom: terminalHeight }}>
+      {/* your page */}
+      <Terminal onHeightChange={setTerminalHeight} config={{ initialState: 'open' }} />
+    </div>
+  );
+};
+```
+
+`onHeightChange` fires on open/close, minimize, fullscreen and while dragging the top edge.
+It reports `0` when the terminal is closed or fullscreen, `40` when minimized, and the current
+pixel height otherwise. Skip the prop and the terminal behaves as a plain overlay.
+
 ## How it works
 
 The old "one command, one buffered response" model is gone. There is no HTTP route that runs
@@ -130,6 +152,61 @@ Options accepted by the `config` prop (see `src/components/Terminal/config/termi
 | `Ctrl+F` | search the scrollback |
 | `Escape` | close the search bar |
 | Right-click | copy with a selection, paste without one |
+
+## Integrating with your page layout
+
+The terminal is a self-contained React component: it never touches the layout of the page that
+hosts it. Everything it needs from you is one number, and everything you need to know is below.
+This is the advanced part — the short version is the `onHeightChange` example above.
+
+### Why you reserve the space yourself
+
+The window is `position: fixed`, docked to the bottom of the viewport. It therefore floats over
+your content instead of pushing it. To stop it covering the bottom of your page, apply the height
+it reports as padding/margin on whatever scroll container you own:
+
+```jsx
+<div style={{ paddingBottom: terminalHeight }}>…</div>
+```
+
+The component does not inject styles into `<body>`, does not alter your DOM, and does not assume a
+particular layout. If your app has a fixed header/footer or an inner scroll area, put the padding
+on the element that actually scrolls.
+
+### Height reporting
+
+`onHeightChange(height)` is called whenever the occupied height changes:
+
+- `0` — closed, or fullscreen (fullscreen is a deliberate overlay over everything; reserving
+  space would make no sense, so exit fullscreen before scrolling the page).
+- `40` — minimized to the title bar.
+- otherwise — the window height in px, following the drag on the top edge.
+
+Use the value however you want: `padding-bottom`, a CSS variable, a grid row, a flex spacer.
+
+### Scroll behaviour
+
+The terminal keeps scrolling to itself. When the mouse is over the terminal, the wheel scrolls
+the xterm buffer and **not** your page, even at the top or bottom of the scrollback. This is
+enforced both in CSS (`overscroll-behavior: contain`) and with a `wheel` listener on the terminal
+container, because xterm drives scrolling in JavaScript. You do not need to do anything.
+
+### Lifecycle and page navigation
+
+- `handleToggleTerminal` exists only while `<Terminal />` is mounted, and is removed on unmount.
+- Closing the window (`X`) does **not** unmount the component — it just hides it. The floating
+  button remains and can reopen it.
+- Unmounting the component (route change, conditional render) tears down the WebSocket and sends
+  `kill`: the shell is gone. To keep the terminal alive across SPA navigation, mount it in a
+  layout component that stays mounted above your routes.
+- A full page reload always starts a fresh shell.
+
+### Server side
+
+The frontend discovers the server itself by probing `/health` on ports 3003–3010, so no
+configuration is needed. The shell is chosen per platform; override it with `INTERACTIVE_SHELL`.
+The working directory is stored server-side (per process) and mirrored in `localStorage` under
+`terminalDirectory`, so the folder picker survives a reload. See the `server/` sources for details.
 
 ## Security
 

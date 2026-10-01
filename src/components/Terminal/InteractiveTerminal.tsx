@@ -530,6 +530,24 @@ export const InteractiveTerminal = forwardRef<InteractiveTerminalHandle, Interac
     container.addEventListener('dragleave', handleDragLeave);
     container.addEventListener('drop', handleDrop);
 
+    // Blocage du défilement en chaîne : xterm gère la molette en JS, et quand le
+    // viewport est déjà en buté, l'événement natif remonte jusqu'à la page hôte
+    // et la fait défiler. On annule donc la molette uniquement à la frontière
+    // (haute ou basse) du buffer ; au milieu, on laisse xterm défiler.
+    const xtermViewport = container.querySelector<HTMLElement>('.xterm-viewport');
+    const handleWheel = (event: WheelEvent) => {
+      const viewport = xtermViewport;
+      if (!viewport || event.deltaY === 0) return;
+      const atTop = viewport.scrollTop <= 0;
+      const atBottom =
+        viewport.scrollTop + viewport.clientHeight >= viewport.scrollHeight - 1;
+      if ((event.deltaY < 0 && atTop) || (event.deltaY > 0 && atBottom)) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+    };
+    container.addEventListener('wheel', handleWheel, { passive: false });
+
     const fit = () => {
       // xterm ne peut pas calculer de dimensions sur un conteneur masqué
       // (`display: none` => 0x0) et `fit()` lève dans ce cas. On ignore : le
@@ -739,6 +757,7 @@ export const InteractiveTerminal = forwardRef<InteractiveTerminalHandle, Interac
       container.removeEventListener('dragover', handleDragOver);
       container.removeEventListener('dragleave', handleDragLeave);
       container.removeEventListener('drop', handleDrop);
+      container.removeEventListener('wheel', handleWheel);
       dataDisposable.dispose();
       resizeDisposable.dispose();
       resultsDisposable.dispose();

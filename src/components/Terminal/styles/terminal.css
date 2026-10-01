@@ -82,6 +82,8 @@
   background-color: #1e1e1e !important;
   scrollbar-width: none;
   -ms-overflow-style: none;
+  /* En butée de défilement, la molette ne doit pas entraîner la page hôte. */
+  overscroll-behavior: contain;
 }
 
 .interactive-terminal .xterm-viewport::-webkit-scrollbar {
@@ -118,6 +120,7 @@
   overflow-y: auto;
   scrollbar-width: thin;
   scrollbar-color: #424242 transparent;
+  overscroll-behavior: contain;
 }
 
 .terminal-session-list::-webkit-scrollbar {
