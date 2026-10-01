@@ -5,17 +5,23 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
-  DropdownMenuTrigger,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
+  DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu';
-import { ChevronDown, Plus } from 'lucide-react';
+import { ChevronDown, Plus, Sparkles } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { ProviderIcon } from './AgentMenu';
+import { AI_PROVIDERS, type AiProvider } from './config/aiProviders';
 import type { ShellKind } from './InteractiveTerminal';
 import { detectOsKind, defaultShellFor, shellProfilesFor } from './config/shellProfiles';
 
 const TOOLTIP = 'bg-[#252526] text-[#d4d4d4] border border-[#333] shadow-md';
 
 interface NewTerminalMenuProps {
-  onCreate: (shell: ShellKind) => void;
+  /** `pendingCommand` non vide = la session naît déjà lancée sur l'agent. */
+  onCreate: (shell: ShellKind, pendingCommand?: string) => void;
 }
 
 /**
@@ -97,6 +103,31 @@ export function NewTerminalMenu({ onCreate }: NewTerminalMenuProps): JSX.Element
             </DropdownMenuItem>
           </React.Fragment>
         ))}
+
+        {/* Agents IA : ouvre une nouvelle session déjà lancée sur l'agent. Le
+            sous-menu part vers la droite, comme partout ailleurs. */}
+        <DropdownMenuSeparator className="bg-[#3c3c3c]" />
+        <DropdownMenuSub>
+          {/* `data-[state=open]:bg-accent` vient du composant shadcn : même
+              spécificité que `focus:bg-*` mais déclaré avant, il gagnait et
+              rendait la ligne blanche sous-menu ouvert. On le neutralise aussi. */}
+          <DropdownMenuSubTrigger className="gap-2 text-[#d4d4d4] focus:bg-[#0e639c] data-[state=open]:bg-[#0e639c]">
+            <Sparkles className="h-3.5 w-3.5" />
+            AI Agent
+          </DropdownMenuSubTrigger>
+          <DropdownMenuSubContent className="min-w-[180px] border-[#333] bg-[#252526] text-[#d4d4d4]">
+            {AI_PROVIDERS.map((provider: AiProvider) => (
+              <DropdownMenuItem
+                key={provider.id}
+                className="gap-2 text-[#d4d4d4] focus:bg-[#0e639c] focus:text-white"
+                onSelect={() => onCreate(defaultShell, provider.command)}
+              >
+                <ProviderIcon provider={provider} />
+                <span>{provider.label}</span>
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuSubContent>
+        </DropdownMenuSub>
       </DropdownMenuContent>
     </DropdownMenu>
   );

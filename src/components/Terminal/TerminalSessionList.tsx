@@ -1,5 +1,7 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Trash2, Terminal as TerminalIcon } from 'lucide-react';
+import { AgentMenu } from './AgentMenu';
+import type { AiProvider } from './config/aiProviders';
 import type { ShellKind } from './InteractiveTerminal';
 import { detectOsKind, shellTitle } from './config/shellProfiles';
 
@@ -13,6 +15,12 @@ export interface TerminalSession {
   restartKey: number;
   /** Répertoire courant réel de la session (suit ses `cd`). */
   cwd?: string;
+  /**
+   * Commande à taper dès que le shell répond. Utilisé quand la session est
+   * née d'un choix d'agent : au montage le PTY n'existe pas encore, la
+   * commande ne peut donc pas partir immédiatement.
+   */
+  pendingCommand?: string;
 }
 
 /** Nom par défaut d'une session : le shell du profil choisi, nommé selon l'OS. */
@@ -25,6 +33,8 @@ interface TerminalSessionListProps {
   activeId: string;
   onSelect: (id: string) => void;
   onClose: (id: string) => void;
+  /** Lance la commande de l'agent choisi dans le PTY de la session. */
+  onLaunchAgent: (id: string, command: string) => void;
 }
 
 /**
@@ -37,6 +47,17 @@ interface TerminalSessionListProps {
  */
 export function TerminalSessionList(props: TerminalSessionListProps): JSX.Element {
   const { sessions, activeId } = props;
+  // Agent retenu par session : l'icône reprend sa marque. Cléé par session pour
+  // que chaque panneau garde son propre choix.
+  const [agents, setAgents] = useState<Record<string, AiProvider>>({});
+
+  const launchAgent = (sessionId: string) => (provider: AiProvider) => {
+    setAgents((prev) => ({ ...prev, [sessionId]: provider }));
+    // On affiche la session avant de taper : xterm ne peut pas écrire dans un
+    // conteneur masqué sans refit.
+    if (sessionId !== activeId) props.onSelect(sessionId);
+    props.onLaunchAgent(sessionId, provider.command);
+  };
 
   return (
     <div className="terminal-sidebar flex w-48 shrink-0 flex-col border-l border-[#333] bg-[#252526]">
@@ -62,8 +83,8 @@ export function TerminalSessionList(props: TerminalSessionListProps): JSX.Elemen
                 <TerminalIcon className="h-3.5 w-3.5 shrink-0 lucide opacity-80" />
                 <span className="truncate">{session.title}</span>
               </button>
-              {/* La croix n'apparaît qu'au survol et seulement s'il reste une
-                  session : fermer la dernière viderait le panneau. */}
+              {/* Agent puis corbeille : les deux n'apparaissent qu'au survol. */}
+              <AgentMenu selected={agents[session.id]} onSelect={launchAgent(session.id)} />
               {sessions.length > 1 && (
                 <button
                   type="button"

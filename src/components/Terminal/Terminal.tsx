@@ -160,22 +160,53 @@ const Terminal: React.FC<TerminalProps> = ({ config = {} }) => {
     );
   }, []);
 
-  const handleCreateSession = useCallback((shell: ShellKind) => {
+  const handleCreateSession = useCallback((shell: ShellKind, pendingCommand?: string) => {
     const id = nextSessionId();
     // Le nom reprend d'abord le profil choisi ; il sera remplacé par la
-    // commande dès que l'utilisateur en lancera une.
-    setSessions((prev) => [...prev, { id, shell, title: defaultSessionTitle(shell), restartKey: 0 }]);
+    // commande dès que l'utilisateur en lancera une. Avec un agent, le nom est
+    // déjà connu : on l'affiche tout de suite.
+    setSessions((prev) => [
+      ...prev,
+      {
+        id,
+        shell,
+        title: defaultSessionTitle(shell),
+        restartKey: 0,
+        pendingCommand
+      }
+    ]);
     setActiveSessionId(id);
   }, []);
 
   // Un processus est en cours → la session prend son nom. Plus rien ne tourne
   // (`null`) → on revient au nom du profil, comme VS Code.
+  // Ferme la session dont le `pendingCommand` vient d'être injecté : sans ça,
+  // un `ready` tardif (reconnexion) relancerait l'agent.
   const handleSessionTitle = useCallback((id: string, title: string | null) => {
     setSessions((prev) =>
       prev.map((session) =>
         session.id === id
           ? { ...session, title: title ?? defaultSessionTitle(session.shell) }
           : session
+      )
+    );
+  }, []);
+
+  // L'agent choisi a été injecté : on n'a plus rien à faire de la commande.
+  const handleCommandConsumed = useCallback((id: string) => {
+    setSessions((prev) =>
+      prev.map((session) => (session.id === id ? { ...session, pendingCommand: undefined } : session))
+    );
+  }, []);
+
+  // Choix d'un agent depuis le panneau des sessions. La session existe déjà et
+  // peut tourner un programme : on la relance (restartKey ++) pour obtenir un
+  // shell propre, et on programme la commande, qui partira au prochain `ready`.
+  // Même mécanisme que le bouton Kill, mais ciblé sur la session visée.
+  const handleLaunchAgent = useCallback((id: string, command: string) => {
+    setSessions((prev) =>
+      prev.map((session) =>
+        session.id === id ? { ...session, restartKey: session.restartKey + 1, pendingCommand: command } : session
       )
     );
   }, []);
@@ -276,6 +307,8 @@ const Terminal: React.FC<TerminalProps> = ({ config = {} }) => {
           onSessionTitle={handleSessionTitle}
           onSessionDirectory={handleSessionDirectory}
           handleKillTerminal={handleKillTerminal}
+          onLaunchAgent={handleLaunchAgent}
+          onCommandConsumed={handleCommandConsumed}
           setIsOpen={handleClose}
           setIsMinimized={setIsMinimized}
           setIsFullscreen={setIsFullscreen}

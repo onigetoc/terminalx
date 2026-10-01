@@ -91,6 +91,11 @@ server type errors break the frontend build.
 
 ## Conventions
 
+- **The UI ships in English.** Every user-facing string — labels, tooltips, aria-labels, menu
+  entries, the `HELP_TEXT` / `ABOUT_TEXT` blocks in `TerminalUI.tsx` — must be English. The
+  user is francophone and writes the prompts in French; do not leak that into the app. Code
+  comments and docblocks stay in French (that is the existing convention in `src/`); only
+  what the user reads on screen is English.
 - Files stay under **600 lines**; extract before they approach it. Largest today:
   `InteractiveTerminal.tsx` (~535), `TerminalUI.tsx` (~285), `Terminal.tsx` (~170).
 - Run `bun run build` yourself to verify. The user runs `bun run dev` — don't spawn dev servers.

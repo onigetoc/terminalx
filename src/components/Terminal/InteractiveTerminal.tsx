@@ -35,6 +35,17 @@ export interface InteractiveTerminalProps {
   /** Notifie le parent du nombre d'occurrences trouvées par la recherche. */
   onMatchCount?: (count: number) => void;
   /**
+   * Commande à exécuter une fois le shell prêt. Permet de créer une session
+   * déjà lancée sur un agent : au montage le PTY n'existe pas encore, la
+   * commande ne peut pas partir avant le `ready` du serveur.
+   */
+  pendingCommand?: string;
+  /**
+   * Rappelé une fois la `pendingCommand` injectée, pour que le parent la vide.
+   * Indispensable : sans ça, un `ready` de reconnexion relancerait l'agent.
+   */
+  onCommandConsumed?: () => void;
+  /**
    * Le parent demande l'ouverture de la recherche (Ctrl+F). Il faut le
    * capacitor ici : sur un écouteur `document` en phase bubble, xterm a déjà
    * envoyé la frappe au shell et le terminal affiche `^F`.
@@ -56,6 +67,12 @@ export interface InteractiveTerminalHandle {
   search: (term: string, direction: 1 | -1) => void;
   /** Retire les surlignages de recherche. */
   clearSearch: () => void;
+  /**
+   * Tape une commande au prompt et valide la ligne. Passe par `{type:'input'}`
+   * et non par `term.paste()` : le bracketed paste est fait pour lescollages
+   * utilisateur et ne submit pas la ligne.
+   */
+  runCommand: (command: string) => void;
   /** Texte actuellement sélectionné, à pré-remplir dans la barre de recherche. */
   getSelection: () => string;
 }
@@ -88,6 +105,8 @@ export const InteractiveTerminal = forwardRef<InteractiveTerminalHandle, Interac
       visible = true,
       onMatchCount,
       onSearchRequest,
+      pendingCommand,
+      onCommandConsumed,
       onTitleChange,
       onDirectoryChange
     },
@@ -113,6 +132,15 @@ export const InteractiveTerminal = forwardRef<InteractiveTerminalHandle, Interac
   // qu'après le montage, d'où la ref objet.
   const termRef = useRef<XTerm | null>(null);
   const searchRef = useRef<SearchAddon | null>(null);
+  // `send` est défini dans l'effet de montage ; cette ref le rend atteignable
+  // depuis `useImperativeHandle` (runCommand).
+  const runCommandRef = useRef<(command: string) => void>(() => {});
+  // Commande demandée à la naissance de la session : consommée au premier
+  // `ready` puis vidée, pour ne pas relancer l'agent à chaque reconnexion.
+  const pendingCommandRef = useRef(pendingCommand);
+  pendingCommandRef.current = pendingCommand;
+  const onCommandConsumedRef = useRef(onCommandConsumed);
+  onCommandConsumedRef.current = onCommandConsumed;
 
   useEffect(() => {
     const container = containerRef.current;
@@ -512,6 +540,14 @@ export const InteractiveTerminal = forwardRef<InteractiveTerminalHandle, Interac
                 // arriver après un changement) : ne voler le focus que si on
                 // est visibles.
                 if (container.clientWidth > 0) term.focus();
+                // Commande d'attente (session créée sur un agent) : le shell
+                // existe maintenant, on peut la taper.
+                if (pendingCommandRef.current) {
+                  const command = pendingCommandRef.current;
+                  pendingCommandRef.current = '';
+                  runCommandRef.current(command);
+                  onCommandConsumedRef.current?.();
+                }
                 break;
               case 'running':
                 // Le serveur a trouvé (ou perdu) un processus enfant du shell :
@@ -609,6 +645,15 @@ export const InteractiveTerminal = forwardRef<InteractiveTerminalHandle, Interac
       }
     };
 
+    // Lance un agent CLI (ou n'importe quelle commande) comme si l'utilisateur
+    // l'avait tapée : on passe par `trackTitle` pour que le nom de la session
+    // suive, et `watch` pour que le serveur confirme le processus enfant.
+    runCommandRef.current = (command: string) => {
+      send({ type: 'input', data: `${command}\r` });
+      trackTitle(`${command}\r`);
+      term.focus();
+    };
+
     const dataDisposable = term.onData((data) => {
       send({ type: 'input', data });
       trackTitle(data);
@@ -627,6 +672,7 @@ export const InteractiveTerminal = forwardRef<InteractiveTerminalHandle, Interac
       disposed = true;
       termRef.current = null;
       searchRef.current = null;
+      runCommandRef.current = () => {};
         fitRef.current = () => {};
       if (reconnectTimer) clearTimeout(reconnectTimer);
       container.removeEventListener('contextmenu', handleContextMenu);
@@ -686,7 +732,8 @@ export const InteractiveTerminal = forwardRef<InteractiveTerminalHandle, Interac
       }
     },
     clearSearch: () => searchRef.current?.clearDecorations(),
-    getSelection: () => termRef.current?.getSelection() ?? ''
+    getSelection: () => termRef.current?.getSelection() ?? '',
+    runCommand: (command: string) => runCommandRef.current(command)
   }), []);
 
   return <div ref={containerRef} className={className || 'interactive-terminal'} />;

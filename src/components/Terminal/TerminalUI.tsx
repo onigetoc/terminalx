@@ -37,7 +37,7 @@ interface TerminalUIProps {
   sessions: TerminalSession[];
   activeSessionId: string;
   onSelectSession: (id: string) => void;
-  onCreateSession: (shell: ShellKind) => void;
+  onCreateSession: (shell: ShellKind, pendingCommand?: string) => void;
   onCloseSession: (id: string) => void;
   /** Un processus a démarré (titre) ou s'est arrêté (null = nom du shell). */
   onSessionTitle: (id: string, title: string | null) => void;
@@ -45,6 +45,13 @@ interface TerminalUIProps {
   onSessionDirectory: (id: string, directory: string) => void;
   /** Relance la session active avec un shell neuf. */
   handleKillTerminal: () => void;
+  /**
+   * Relance une session précise avec un shell neuf et y lance un agent. Le
+   * panneau des sessions s'en sert quand un programme tourne déjà.
+   */
+  onLaunchAgent: (id: string, command: string) => void;
+  /** Vide la `pendingCommand` d'une session une fois injectée dans le shell. */
+  onCommandConsumed: (id: string) => void;
   setIsOpen: (val: boolean) => void;
   setIsMinimized: (val: boolean) => void;
   setIsFullscreen: (val: boolean) => void;
@@ -163,6 +170,13 @@ export function TerminalUI(props: TerminalUIProps): JSX.Element {
       props.onSessionDirectory(id, directory);
     },
     [props.onSessionDirectory]
+  );
+
+  const handleCommandConsumed = useCallback(
+    (id: string) => () => {
+      props.onCommandConsumed(id);
+    },
+    [props.onCommandConsumed]
   );
 
   // Ouverture via Ctrl+F (raccourci intercepté dans <InteractiveTerminal>).
@@ -340,6 +354,8 @@ export function TerminalUI(props: TerminalUIProps): JSX.Element {
                   }}
                   shell={session.shell}
                   visible={isActive}
+                  pendingCommand={session.pendingCommand}
+                  onCommandConsumed={handleCommandConsumed(session.id)}
                   currentDirectory={session.cwd || props.currentDirectory}
                   onMatchCount={handleMatchCount(session.id)}
                   onSearchRequest={openSearch}
@@ -359,6 +375,7 @@ export function TerminalUI(props: TerminalUIProps): JSX.Element {
               activeId={activeSessionId}
               onSelect={props.onSelectSession}
               onClose={props.onCloseSession}
+              onLaunchAgent={props.onLaunchAgent}
             />
           )}
         </div>
