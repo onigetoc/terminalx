@@ -188,7 +188,16 @@ const Terminal: React.FC<TerminalProps> = ({ config = {} }) => {
     setSessions((prev) =>
       prev.map((session) =>
         session.id === id
-          ? { ...session, title: title ?? defaultSessionTitle(session.shell) }
+          ? {
+              ...session,
+              title: title ?? defaultSessionTitle(session.shell),
+              // Plus de process en cours (`title === null`) et rien en attente
+              // d'injection : l'agent a quitté (`/quit`, Ctrl+C), la marque du
+              // panneau redevient neutre. On la garde tant qu'une commande
+              // d'agent n'a pas encore été injectée (pendingCommand), sinon le
+              // redémarrage de session effacerait l'icône avant même le lancement.
+              agentId: title || session.pendingCommand ? session.agentId : undefined
+            }
           : session
       )
     );
