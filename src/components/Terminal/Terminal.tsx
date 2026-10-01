@@ -11,7 +11,7 @@ import '@/components/Terminal/styles/terminal.css';
 import { TerminalUI } from './TerminalUI';
 import { TerminalConfig, defaultConfig, terminalConfig } from '@/components/Terminal/config/terminalConfig';
 import type { ShellKind } from './InteractiveTerminal';
-import type { AiProvider } from './config/aiProviders';
+import { findProviderByCommand, type AiProvider } from './config/aiProviders';
 import { defaultSessionTitle, type TerminalSession } from './TerminalSessionList';
 import {
   BRAND_TITLE,
@@ -186,20 +186,27 @@ const Terminal: React.FC<TerminalProps> = ({ config = {} }) => {
   // un `ready` tardif (reconnexion) relancerait l'agent.
   const handleSessionTitle = useCallback((id: string, title: string | null) => {
     setSessions((prev) =>
-      prev.map((session) =>
-        session.id === id
-          ? {
-              ...session,
-              title: title ?? defaultSessionTitle(session.shell),
-              // Plus de process en cours (`title === null`) et rien en attente
-              // d'injection : l'agent a quitté (`/quit`, Ctrl+C), la marque du
-              // panneau redevient neutre. On la garde tant qu'une commande
-              // d'agent n'a pas encore été injectée (pendingCommand), sinon le
-              // redémarrage de session effacerait l'icône avant même le lancement.
-              agentId: title || session.pendingCommand ? session.agentId : undefined
-            }
-          : session
-      )
+      prev.map((session) => {
+        if (session.id !== id) return session;
+        // Un agent tapé à la main (`claude`, `gemini`…) prend sa marque dans le
+        // panneau exactement comme s'il avait été choisi au menu. Le titre d'un
+        // process est le premier mot de la ligne lancée.
+        const detected = title ? findProviderByCommand(title)?.id : undefined;
+        return {
+          ...session,
+          title: title ?? defaultSessionTitle(session.shell),
+          // Plus de process en cours (`title === null`) et rien en attente
+          // d'injection : l'agent a quitté (`/quit`, Ctrl+C), la marque du
+          // panneau redevient neutre. On la garde tant qu'une commande
+          // d'agent n'a pas encore été injectée (pendingCommand), sinon le
+          // redémarrage de session effacerait l'icône avant même le lancement.
+          agentId: title
+            ? detected ?? session.agentId
+            : session.pendingCommand
+              ? session.agentId
+              : undefined
+        };
+      })
     );
   }, []);
 

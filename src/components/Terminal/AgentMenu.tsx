@@ -34,11 +34,30 @@ export function ProviderIcon({
       className={className}
       aria-hidden="true"
     >
+      {provider.logo.gradients && (
+        <defs>
+          {provider.logo.gradients.map((gradient) => (
+            <linearGradient
+              key={gradient.id}
+              id={gradient.id}
+              x1={gradient.x1}
+              y1={gradient.y1}
+              x2={gradient.x2}
+              y2={gradient.y2}
+              gradientUnits="userSpaceOnUse"
+            >
+              {gradient.stops.map((stop) => (
+                <stop key={stop.offset} offset={stop.offset} stopColor={stop.color} />
+              ))}
+            </linearGradient>
+          ))}
+        </defs>
+      )}
       {provider.logo.paths.map((mark) => (
         <path
           key={mark.d}
           d={mark.d}
-          fill={provider.fill ?? 'currentColor'}
+          fill={mark.fill ?? provider.fill ?? 'currentColor'}
           fillRule={mark.fillRule}
         />
       ))}

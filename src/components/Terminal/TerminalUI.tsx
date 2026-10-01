@@ -386,7 +386,7 @@ export function TerminalUI(props: TerminalUIProps): JSX.Element {
         </div>
 
         {!props.mergedConfig.readOnlyMode && (
-          <div className="terminal-footer flex items-center justify-between gap-4 p-1.5 pl-2 pr-2 bg-[#252526] border-t border-[#333]">
+          <div className="terminal-footer flex items-center justify-between gap-4 p-0.5 px-2 bg-[#252526] border-t border-[#333]">
             {/* OS de l'utilisateur puis répertoire courant de la session
                 active, à gauche. */}
             <div className="min-w-0 truncate text-xs text-gray-400">

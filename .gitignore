@@ -69,3 +69,6 @@ lerna-debug.log*
 rules
 # Playwright CLI output (may contain credentials)
 .playwright-cli/
+
+# Notes de dev locales (non versionnées)
+/dev-notes

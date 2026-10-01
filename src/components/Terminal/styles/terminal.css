@@ -109,18 +109,31 @@
 
 /* Liste des sessions dans le panneau latéral.
  *
- * Elle défile quand il y a plus de sessions que de place (fenêtre basse), mais
- * sans barre visible : même traitement que le viewport xterm, la molette reste
- * fonctionnelle. */
+ * Elle défile quand il y a plus de sessions que de place (fenêtre basse). La
+ * barre verticale n'apparaît qu'au besoin (`auto`) et suit le thème sombre du
+ * panneau au lieu de la barre native claire de Windows. */
 .terminal-session-list {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  scrollbar-width: none;
-  -ms-overflow-style: none;
+  scrollbar-width: thin;
+  scrollbar-color: #424242 transparent;
 }
 
 .terminal-session-list::-webkit-scrollbar {
-  width: 0;
-  height: 0;
+  width: 8px;
+  height: 8px;
+}
+
+.terminal-session-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.terminal-session-list::-webkit-scrollbar-thumb {
+  background-color: #424242;
+  border-radius: 4px;
+}
+
+.terminal-session-list::-webkit-scrollbar-thumb:hover {
+  background-color: #4f4f4f;
 }
