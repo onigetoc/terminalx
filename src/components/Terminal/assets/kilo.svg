@@ -1,0 +1,10 @@
+<!-- Source: https://svgcon.dev/icon/kilo-code/ -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="#FFDC03">
+  <path d="M23 26v-2h3v-5l-2-2h-4v2h-3v5l2 2h4Zm-3-6h3v3h-3v-3Z"/>
+  <rect x="12" y="17" width="3" height="3"/>
+  <path d="M26 12h-3V9l-3-3h-3v3h3v3h-3v3h9v-3Z"/>
+  <path d="M0 0v32h32V0H0Zm29 29H3V3h26v26Z"/>
+  <path d="M15 26v-3H9v-6H6v6.187l2.812 2.813H15Z"/>
+  <rect x="12" y="6" width="3" height="3"/>
+  <path d="M9 12h3v3h3v-3l-3-3H9V6H6v9h3v-3Z"/>
+</svg>

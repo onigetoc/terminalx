@@ -9,6 +9,21 @@ import { Bot, Download } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { AI_PROVIDERS, type AiProvider } from './config/aiProviders';
 import { useAgentPicker } from './useAgentPicker';
+import antigravityIcon from './assets/antigravity.svg';
+import clineIcon from './assets/cline.svg';
+import copilotIcon from './assets/github-copilot.svg';
+import groqIcon from './assets/groq.svg';
+import kimiIcon from './assets/kimi.svg';
+import kiloIcon from './assets/kilo.svg';
+
+const PROVIDER_ICON_ASSETS: Record<NonNullable<AiProvider['iconAsset']>, string> = {
+  antigravity: antigravityIcon,
+  'github-copilot': copilotIcon,
+  groq: groqIcon,
+  kimi: kimiIcon,
+  cline: clineIcon,
+  kilo: kiloIcon
+};
 
 /**
  * Marque d'un provider. Rendue dans le viewBox du logo, donc elle se
@@ -28,6 +43,20 @@ export function ProviderIcon({
   provider: AiProvider;
   className?: string;
 }): JSX.Element {
+  const iconAsset = provider.iconAsset && PROVIDER_ICON_ASSETS[provider.iconAsset];
+  if (iconAsset) {
+    return (
+      <img
+        src={iconAsset}
+        className={`${className} ${provider.iconBackdrop ? 'rounded-sm bg-white p-[1px]' : ''}`}
+        alt=""
+        aria-hidden="true"
+      />
+    );
+  }
+
+  if (!provider.logo) return <Bot className={className} aria-hidden="true" />;
+
   return (
     <svg
       viewBox={provider.logo.viewBox ?? '0 0 24 24'}
